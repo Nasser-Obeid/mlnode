@@ -1,0 +1,73 @@
+{
+  "mlnode_schema_version": "1.0",
+  "metadata": {
+    "name": "Stacked ResNet Blocks",
+    "description": "Two chained residual blocks using the Block feature",
+    "author": "mlnode"
+  },
+  "input_shape": ["B", 64, 56, 56],
+  "output_node": "res2",
+  "nodes": [
+    {"id": "input", "type": "Input", "params": {}},
+    {
+      "id": "res1",
+      "type": "Block",
+      "block": {
+        "input_node": "bin",
+        "output_node": "brelu",
+        "nodes": [
+          {"id": "bin", "type": "Input", "params": {}},
+          {"id": "bconv1", "type": "Conv2d", "params": {"in_channels": 64, "out_channels": 64, "kernel_size": 3, "padding": 1}},
+          {"id": "bbn1", "type": "BatchNorm2d", "params": {"num_features": 64}},
+          {"id": "brelu1", "type": "ReLU", "params": {}},
+          {"id": "bconv2", "type": "Conv2d", "params": {"in_channels": 64, "out_channels": 64, "kernel_size": 3, "padding": 1}},
+          {"id": "bbn2", "type": "BatchNorm2d", "params": {"num_features": 64}},
+          {"id": "bskip", "type": "Add", "params": {}},
+          {"id": "brelu", "type": "ReLU", "params": {}}
+        ],
+        "edges": [
+          {"source": "bin", "target": "bconv1"},
+          {"source": "bconv1", "target": "bbn1"},
+          {"source": "bbn1", "target": "brelu1"},
+          {"source": "brelu1", "target": "bconv2"},
+          {"source": "bconv2", "target": "bbn2"},
+          {"source": "bin", "target": "bskip"},
+          {"source": "bbn2", "target": "bskip"},
+          {"source": "bskip", "target": "brelu"}
+        ]
+      }
+    },
+    {
+      "id": "res2",
+      "type": "Block",
+      "block": {
+        "input_node": "bin",
+        "output_node": "brelu",
+        "nodes": [
+          {"id": "bin", "type": "Input", "params": {}},
+          {"id": "bconv1", "type": "Conv2d", "params": {"in_channels": 64, "out_channels": 64, "kernel_size": 3, "padding": 1}},
+          {"id": "bbn1", "type": "BatchNorm2d", "params": {"num_features": 64}},
+          {"id": "brelu1", "type": "ReLU", "params": {}},
+          {"id": "bconv2", "type": "Conv2d", "params": {"in_channels": 64, "out_channels": 64, "kernel_size": 3, "padding": 1}},
+          {"id": "bbn2", "type": "BatchNorm2d", "params": {"num_features": 64}},
+          {"id": "bskip", "type": "Add", "params": {}},
+          {"id": "brelu", "type": "ReLU", "params": {}}
+        ],
+        "edges": [
+          {"source": "bin", "target": "bconv1"},
+          {"source": "bconv1", "target": "bbn1"},
+          {"source": "bbn1", "target": "brelu1"},
+          {"source": "brelu1", "target": "bconv2"},
+          {"source": "bconv2", "target": "bbn2"},
+          {"source": "bin", "target": "bskip"},
+          {"source": "bbn2", "target": "bskip"},
+          {"source": "bskip", "target": "brelu"}
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {"source": "input", "target": "res1"},
+    {"source": "res1", "target": "res2"}
+  ]
+}

@@ -1,0 +1,167 @@
+{
+  "mlnode_schema_version": "1.0",
+  "metadata": {
+    "name": "MNIST CNN"
+  },
+  "input_shape": [
+    "B",
+    1,
+    28,
+    28
+  ],
+  "output_node": "linear_out",
+  "nodes": [
+    {
+      "id": "input_0",
+      "type": "Input",
+      "params": {}
+    },
+    {
+      "id": "conv1",
+      "type": "Conv2d",
+      "params": {
+        "in_channels": 1,
+        "out_channels": 32,
+        "kernel_size": 3,
+        "padding": 1
+      }
+    },
+    {
+      "id": "relu1",
+      "type": "ReLU",
+      "params": {}
+    },
+    {
+      "id": "conv2",
+      "type": "Conv2d",
+      "params": {
+        "in_channels": 32,
+        "out_channels": 64,
+        "kernel_size": 3,
+        "padding": 1
+      }
+    },
+    {
+      "id": "relu2",
+      "type": "ReLU",
+      "params": {}
+    },
+    {
+      "id": "pool",
+      "type": "MaxPool2d",
+      "params": {
+        "kernel_size": 2
+      }
+    },
+    {
+      "id": "drop1",
+      "type": "Dropout",
+      "params": {
+        "p": 0.25
+      }
+    },
+    {
+      "id": "flatten",
+      "type": "Flatten",
+      "params": {
+        "start_dim": 1
+      }
+    },
+    {
+      "id": "fc1",
+      "type": "Linear",
+      "params": {
+        "in_features": 12544,
+        "out_features": 128
+      }
+    },
+    {
+      "id": "relu3",
+      "type": "ReLU",
+      "params": {}
+    },
+    {
+      "id": "drop2",
+      "type": "Dropout",
+      "params": {
+        "p": 0.5
+      }
+    },
+    {
+      "id": "linear_out",
+      "type": "Linear",
+      "params": {
+        "in_features": 128,
+        "out_features": 10
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "input_0",
+      "source_port": null,
+      "target": "conv1",
+      "target_port": null
+    },
+    {
+      "source": "conv1",
+      "source_port": null,
+      "target": "relu1",
+      "target_port": null
+    },
+    {
+      "source": "relu1",
+      "source_port": null,
+      "target": "conv2",
+      "target_port": null
+    },
+    {
+      "source": "conv2",
+      "source_port": null,
+      "target": "relu2",
+      "target_port": null
+    },
+    {
+      "source": "relu2",
+      "source_port": null,
+      "target": "pool",
+      "target_port": null
+    },
+    {
+      "source": "pool",
+      "source_port": null,
+      "target": "drop1",
+      "target_port": null
+    },
+    {
+      "source": "drop1",
+      "source_port": null,
+      "target": "flatten",
+      "target_port": null
+    },
+    {
+      "source": "flatten",
+      "source_port": null,
+      "target": "fc1",
+      "target_port": null
+    },
+    {
+      "source": "fc1",
+      "source_port": null,
+      "target": "relu3",
+      "target_port": null
+    },
+    {
+      "source": "relu3",
+      "source_port": null,
+      "target": "drop2",
+      "target_port": null
+    },
+    {
+      "source": "drop2",
+      "source_port": null,
+      "target": "linear_out",
+      "target_port": null
+    }
+  ]
+}

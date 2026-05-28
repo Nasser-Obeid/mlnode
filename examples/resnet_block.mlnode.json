@@ -1,0 +1,30 @@
+{
+  "mlnode_schema_version": "1.0",
+  "metadata": {
+    "name": "ResNet Block",
+    "description": "Basic residual block with skip connection",
+    "author": "mlnode"
+  },
+  "input_shape": ["B", 64, 56, 56],
+  "output_node": "relu",
+  "nodes": [
+    {"id": "input", "type": "Input", "params": {}},
+    {"id": "conv1", "type": "Conv2d", "params": {"in_channels": 64, "out_channels": 64, "kernel_size": 3, "padding": 1}},
+    {"id": "bn1", "type": "BatchNorm2d", "params": {"num_features": 64}},
+    {"id": "relu1", "type": "ReLU", "params": {}},
+    {"id": "conv2", "type": "Conv2d", "params": {"in_channels": 64, "out_channels": 64, "kernel_size": 3, "padding": 1}},
+    {"id": "bn2", "type": "BatchNorm2d", "params": {"num_features": 64}},
+    {"id": "skip", "type": "Add", "params": {}},
+    {"id": "relu", "type": "ReLU", "params": {}}
+  ],
+  "edges": [
+    {"source": "input", "source_port": null, "target": "conv1", "target_port": null},
+    {"source": "conv1", "source_port": null, "target": "bn1", "target_port": null},
+    {"source": "bn1", "source_port": null, "target": "relu1", "target_port": null},
+    {"source": "relu1", "source_port": null, "target": "conv2", "target_port": null},
+    {"source": "conv2", "source_port": null, "target": "bn2", "target_port": null},
+    {"source": "input", "source_port": null, "target": "skip", "target_port": null},
+    {"source": "bn2", "source_port": null, "target": "skip", "target_port": null},
+    {"source": "skip", "source_port": null, "target": "relu", "target_port": null}
+  ]
+}
