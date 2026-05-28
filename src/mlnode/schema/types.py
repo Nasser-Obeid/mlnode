@@ -77,7 +77,7 @@ CORE_LAYER_TYPES = frozenset({
     
     # Recurrent Layers
     "RNNBase", "RNN", "LSTM", "GRU",
-    "RNNCell", "LSTMCell", "GRUCell"
+    "RNNCell", "LSTMCell", "GRUCell",
     
     # Transformer Layers
     "Transformer", "TransformerEncoder", "TransformerDecoder",
