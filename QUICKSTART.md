@@ -1,4 +1,4 @@
-# MLnode Quickstart
+# mlnode Quickstart
 
 From zero to a trained PyTorch model in about five minutes. Every snippet here is copy-paste runnable.
 
