@@ -1,10 +1,10 @@
-# MLnode
+# mlnode
 
 **JSON-described DAG → executable PyTorch `nn.Module`.**
 
-MLnode lets you define deep learning architectures as JSON graphs. It parses, validates, and compiles them into standard PyTorch modules you can train and deploy. No `exec()`, no `eval()`, no magic. MLnode speeds up ML/DL development by letting you focus on the model architecture instead of the wiring code — and by catching shape errors statically, before a single tensor is allocated.
+mlnode lets you define deep learning architectures as JSON graphs. It parses, validates, and compiles them into standard PyTorch modules you can train and deploy. No `exec()`, no `eval()`, no magic. mlnode speeds up ML/DL development by letting you focus on the model architecture instead of the wiring code — and by catching shape errors statically, before a single tensor is allocated.
 
-Graphs can be written by hand, generated programmatically, or drawn visually in [mlnode-editor](https://github.com/Nasser-Obeid/MLnode-editor), the companion web editor that exports the same `.mlnode.json` format.
+Graphs can be written by hand, generated programmatically, or drawn visually in [mlnode-editor](https://github.com/Nasser-Obeid/mlnode-editor), the companion web editor that exports the same `.mlnode.json` format.
 
 ## Installation
 
@@ -15,29 +15,29 @@ pip install "mlnode[hf]"      # + HuggingFace nodes (transformers)
 
 Requires Python ≥ 3.11. PyTorch ≥ 2.4, NetworkX ≥ 3.0, and Pydantic ≥ 2.0 are installed automatically.
 
-For development, clone [the repo](https://github.com/Nasser-Obeid/MLnode) and `pip install -e ".[dev]"` — or run `./setup.sh`, which checks the Python version, creates `.venv`, and installs everything.
+For development, clone [the repo](https://github.com/Nasser-Obeid/mlnode) and `pip install -e ".[dev]"` — or run `./setup.sh`, which checks the Python version, creates `.venv`, and installs everything.
 
 ## Documentation
 
 | Doc | Contents |
 |-----|----------|
-| [QUICKSTART.md](https://github.com/Nasser-Obeid/MLnode/blob/main/QUICKSTART.md) | Zero to trained model in five minutes |
-| [docs/getting-started.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/getting-started.md) | Install, first model, validate/build/save, training |
-| [docs/json-schema.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/json-schema.md) | Complete `.mlnode.json` format reference |
-| [docs/api.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/api.md) | Python API reference for every public class |
-| [docs/validation.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/validation.md) | How static shape validation works |
-| [docs/blocks.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/blocks.md) | Reusable sub-graphs: inline blocks, `block_ref`, `BlockRegistry` |
-| [docs/custom-layers.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/custom-layers.md) | Plugging your own `nn.Module` classes into a graph |
-| [docs/huggingface.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/huggingface.md) | Pretrained and config-initialized HuggingFace nodes |
-| [docs/MLNODE_SPEC_v1_0.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/MLNODE_SPEC_v1_0.md) | The frozen v1.0 specification |
+| [QUICKSTART.md](https://github.com/Nasser-Obeid/mlnode/blob/main/QUICKSTART.md) | Zero to trained model in five minutes |
+| [docs/getting-started.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/getting-started.md) | Install, first model, validate/build/save, training |
+| [docs/json-schema.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/json-schema.md) | Complete `.mlnode.json` format reference |
+| [docs/api.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/api.md) | Python API reference for every public class |
+| [docs/validation.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/validation.md) | How static shape validation works |
+| [docs/blocks.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/blocks.md) | Reusable sub-graphs: inline blocks, `block_ref`, `BlockRegistry` |
+| [docs/custom-layers.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/custom-layers.md) | Plugging your own `nn.Module` classes into a graph |
+| [docs/huggingface.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/huggingface.md) | Pretrained and config-initialized HuggingFace nodes |
+| [docs/mlnode_SPEC_v1_0.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/mlnode_SPEC_v1_0.md) | The frozen v1.0 specification |
 
 ## Quick Start
 
 ```python
-from mlnode import MLnodeModel
+from mlnode import mlnodeModel
 import torch
 
-model = MLnodeModel.from_dict({
+model = mlnodeModel.from_dict({
     "mlnode_schema_version": "1.0",
     "input_shape": ["B", 10],
     "output_node": "fc",
@@ -73,16 +73,16 @@ JSON → Parser → Validator → Executor → nn.Module
 
 ## API Reference
 
-### MLnodeModel
+### mlnodeModel
 
 The top-level class tying everything together.
 
 ```python
-class MLnodeModel:
+class mlnodeModel:
     @classmethod
-    def load(cls, path: str, block_registry=None) -> MLnodeModel
+    def load(cls, path: str, block_registry=None) -> mlnodeModel
     @classmethod
-    def from_dict(cls, data: dict, block_registry=None) -> MLnodeModel
+    def from_dict(cls, data: dict, block_registry=None) -> mlnodeModel
     def validate(self) -> ValidationResult
     def build(self) -> nn.Module
     def save(self, path: str, *, expanded: bool = False) -> None
@@ -112,13 +112,13 @@ registry.register("resnet_block", BlockDefinition.model_validate({
 }))
 registry.register_from_file("transformer_block", "blocks/transformer.json")
 
-model = MLnodeModel.load("model.mlnode.json", block_registry=registry)
+model = mlnodeModel.load("model.mlnode.json", block_registry=registry)
 ```
 
 ### Error Hierarchy
 
 ```
-MLnodeError
+mlnodeError
 ├── ValidationError
 │   ├── CycleDetectedError
 │   └── ShapeMismatchError
@@ -223,7 +223,7 @@ Only `id`, `type`, and `params` are required. All other fields are optional.
 | Composable | `Block` |
 | Custom | `custom` |
 
-\* Accepted by the schema and buildable, but the static shape rule is not implemented yet — graphs containing these types currently fail `validate()` (and therefore `build()`). See [docs/validation.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/validation.md) for the full status table.
+\* Accepted by the schema and buildable, but the static shape rule is not implemented yet — graphs containing these types currently fail `validate()` (and therefore `build()`). See [docs/validation.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/validation.md) for the full status table.
 
 Reduction ops have implicit reduction semantics — they accept multiple inputs without needing a `reduction` field. Setting `reduction` on a reduction op is an error.
 
@@ -257,7 +257,7 @@ Symbolic dims propagate through the graph. `Conv2d` with input `(B, 3, 224, 224)
 
 ## Custom Layers
 
-Custom layers are Python classes that inherit `nn.Module`. MLnode validates them by:
+Custom layers are Python classes that inherit `nn.Module`. mlnode validates them by:
 
 1. Importing the class via `importlib` (no `exec`/`eval`)
 2. Verifying it inherits `nn.Module`
@@ -325,7 +325,7 @@ Runnable training notebooks live in `examples/notebooks/`:
 
 - `mlnode_mnist_training.ipynb` — CNN classifier on MNIST (`mnist_cnn.mlnode.json`)
 - `mlnode_transformer_training.ipynb` — TransformerEncoder classifier over MNIST rows-as-sequence (`mnist_transformer.mlnode.json`)
-- `mlnode_gan_training.ipynb` — DCGAN-style GAN where generator and discriminator are both MLnode graphs (`gan_generator.mlnode.json`, `gan_discriminator.mlnode.json`)
+- `mlnode_gan_training.ipynb` — DCGAN-style GAN where generator and discriminator are both mlnode graphs (`gan_generator.mlnode.json`, `gan_discriminator.mlnode.json`)
 
 All `.mlnode.json` files open directly in mlnode-editor (Import → auto-layout).
 
@@ -380,7 +380,7 @@ All `.mlnode.json` files open directly in mlnode-editor (Import → auto-layout)
 ### Multi-Input Graph
 
 ```python
-model = MLnodeModel.from_dict({
+model = mlnodeModel.from_dict({
     "mlnode_schema_version": "1.0",
     "input_shape": ["B", 32],
     "output_node": "add",
@@ -421,7 +421,7 @@ Markers: `slow` (downloads HuggingFace models), `gpu` (requires CUDA).
 ```
 src/mlnode/
 ├── __init__.py          # Public API exports
-├── model.py             # MLnodeModel — top-level API
+├── model.py             # mlnodeModel — top-level API
 ├── errors.py            # Error hierarchy
 ├── schema/
 │   ├── models.py        # Pydantic models (GraphSchema, NodeSchema, EdgeSchema, BlockDefinition)
@@ -431,7 +431,7 @@ src/mlnode/
 ├── validator/
 │   └── shapes.py        # ShapeValidator with per-type shape transform rules
 ├── executor/
-│   └── builder.py       # ModuleBuilder → MLnodeModule(nn.Module)
+│   └── builder.py       # ModuleBuilder → mlnodeModule(nn.Module)
 ├── layers/
 │   ├── registry.py      # Maps type strings to nn.Module constructors
 │   └── custom.py        # Custom layer validation (spec §4, steps 1-5)
