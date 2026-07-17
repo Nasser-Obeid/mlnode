@@ -1,0 +1,487 @@
+{
+  "mlnode_schema_version": "1.0",
+  "metadata": {
+    "name": "Transformer \u2014 Attention Is All You Need",
+    "description": "Original encoder-decoder Transformer (Vaswani et al., 2017), base config: d_model=512, 8 heads, d_ff=2048, dropout 0.1, shared 37k-token embedding (via shared_id, as in the paper). One encoder and one decoder layer shown expanded; the paper stacks N=6 of each. Not expressible as graph nodes: sinusoidal positional encoding, the causal decoder mask, and the sqrt(d_model) embedding scale - add those in code for real training.",
+    "author": "Nasser Obeid"
+  },
+  "input_shape": [
+    "B",
+    "Seq"
+  ],
+  "output_node": "softmax",
+  "nodes": [
+    {
+      "id": "src_input",
+      "type": "Input",
+      "params": {}
+    },
+    {
+      "id": "src_embed",
+      "type": "Embedding",
+      "params": {
+        "num_embeddings": 37000,
+        "embedding_dim": 512
+      },
+      "shared_id": "shared_token_embedding"
+    },
+    {
+      "id": "src_dropout",
+      "type": "Dropout",
+      "params": {
+        "p": 0.1
+      }
+    },
+    {
+      "id": "enc_self_attention",
+      "type": "MultiheadAttention",
+      "params": {
+        "embed_dim": 512,
+        "num_heads": 8,
+        "dropout": 0.1,
+        "batch_first": true
+      }
+    },
+    {
+      "id": "enc_attn_dropout",
+      "type": "Dropout",
+      "params": {
+        "p": 0.1
+      }
+    },
+    {
+      "id": "enc_attn_residual",
+      "type": "Add",
+      "params": {}
+    },
+    {
+      "id": "enc_attn_norm",
+      "type": "LayerNorm",
+      "params": {
+        "normalized_shape": 512
+      }
+    },
+    {
+      "id": "enc_ffn_expand",
+      "type": "Linear",
+      "params": {
+        "in_features": 512,
+        "out_features": 2048
+      }
+    },
+    {
+      "id": "enc_ffn_relu",
+      "type": "ReLU",
+      "params": {}
+    },
+    {
+      "id": "enc_ffn_contract",
+      "type": "Linear",
+      "params": {
+        "in_features": 2048,
+        "out_features": 512
+      }
+    },
+    {
+      "id": "enc_ffn_dropout",
+      "type": "Dropout",
+      "params": {
+        "p": 0.1
+      }
+    },
+    {
+      "id": "enc_ffn_residual",
+      "type": "Add",
+      "params": {}
+    },
+    {
+      "id": "enc_ffn_norm",
+      "type": "LayerNorm",
+      "params": {
+        "normalized_shape": 512
+      }
+    },
+    {
+      "id": "tgt_input",
+      "type": "Input",
+      "params": {}
+    },
+    {
+      "id": "tgt_embed",
+      "type": "Embedding",
+      "params": {
+        "num_embeddings": 37000,
+        "embedding_dim": 512
+      },
+      "shared_id": "shared_token_embedding"
+    },
+    {
+      "id": "tgt_dropout",
+      "type": "Dropout",
+      "params": {
+        "p": 0.1
+      }
+    },
+    {
+      "id": "dec_masked_self_attention",
+      "type": "MultiheadAttention",
+      "params": {
+        "embed_dim": 512,
+        "num_heads": 8,
+        "dropout": 0.1,
+        "batch_first": true
+      }
+    },
+    {
+      "id": "dec_self_attn_dropout",
+      "type": "Dropout",
+      "params": {
+        "p": 0.1
+      }
+    },
+    {
+      "id": "dec_self_attn_residual",
+      "type": "Add",
+      "params": {}
+    },
+    {
+      "id": "dec_self_attn_norm",
+      "type": "LayerNorm",
+      "params": {
+        "normalized_shape": 512
+      }
+    },
+    {
+      "id": "dec_cross_attention",
+      "type": "MultiheadAttention",
+      "params": {
+        "embed_dim": 512,
+        "num_heads": 8,
+        "dropout": 0.1,
+        "batch_first": true
+      }
+    },
+    {
+      "id": "dec_cross_attn_dropout",
+      "type": "Dropout",
+      "params": {
+        "p": 0.1
+      }
+    },
+    {
+      "id": "dec_cross_attn_residual",
+      "type": "Add",
+      "params": {}
+    },
+    {
+      "id": "dec_cross_attn_norm",
+      "type": "LayerNorm",
+      "params": {
+        "normalized_shape": 512
+      }
+    },
+    {
+      "id": "dec_ffn_expand",
+      "type": "Linear",
+      "params": {
+        "in_features": 512,
+        "out_features": 2048
+      }
+    },
+    {
+      "id": "dec_ffn_relu",
+      "type": "ReLU",
+      "params": {}
+    },
+    {
+      "id": "dec_ffn_contract",
+      "type": "Linear",
+      "params": {
+        "in_features": 2048,
+        "out_features": 512
+      }
+    },
+    {
+      "id": "dec_ffn_dropout",
+      "type": "Dropout",
+      "params": {
+        "p": 0.1
+      }
+    },
+    {
+      "id": "dec_ffn_residual",
+      "type": "Add",
+      "params": {}
+    },
+    {
+      "id": "dec_ffn_norm",
+      "type": "LayerNorm",
+      "params": {
+        "normalized_shape": 512
+      }
+    },
+    {
+      "id": "generator",
+      "type": "Linear",
+      "params": {
+        "in_features": 512,
+        "out_features": 37000
+      }
+    },
+    {
+      "id": "softmax",
+      "type": "Softmax",
+      "params": {
+        "dim": -1
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "src_input",
+      "source_port": null,
+      "target": "src_embed",
+      "target_port": null
+    },
+    {
+      "source": "src_embed",
+      "source_port": null,
+      "target": "src_dropout",
+      "target_port": null
+    },
+    {
+      "source": "src_dropout",
+      "source_port": null,
+      "target": "enc_self_attention",
+      "target_port": "query"
+    },
+    {
+      "source": "src_dropout",
+      "source_port": null,
+      "target": "enc_self_attention",
+      "target_port": "key"
+    },
+    {
+      "source": "src_dropout",
+      "source_port": null,
+      "target": "enc_self_attention",
+      "target_port": "value"
+    },
+    {
+      "source": "enc_self_attention",
+      "source_port": null,
+      "target": "enc_attn_dropout",
+      "target_port": null
+    },
+    {
+      "source": "enc_attn_dropout",
+      "source_port": null,
+      "target": "enc_attn_residual",
+      "target_port": null
+    },
+    {
+      "source": "enc_attn_residual",
+      "source_port": null,
+      "target": "enc_attn_norm",
+      "target_port": null
+    },
+    {
+      "source": "src_dropout",
+      "source_port": null,
+      "target": "enc_attn_residual",
+      "target_port": null
+    },
+    {
+      "source": "enc_attn_norm",
+      "source_port": null,
+      "target": "enc_ffn_expand",
+      "target_port": null
+    },
+    {
+      "source": "enc_ffn_expand",
+      "source_port": null,
+      "target": "enc_ffn_relu",
+      "target_port": null
+    },
+    {
+      "source": "enc_ffn_relu",
+      "source_port": null,
+      "target": "enc_ffn_contract",
+      "target_port": null
+    },
+    {
+      "source": "enc_ffn_contract",
+      "source_port": null,
+      "target": "enc_ffn_dropout",
+      "target_port": null
+    },
+    {
+      "source": "enc_ffn_dropout",
+      "source_port": null,
+      "target": "enc_ffn_residual",
+      "target_port": null
+    },
+    {
+      "source": "enc_ffn_residual",
+      "source_port": null,
+      "target": "enc_ffn_norm",
+      "target_port": null
+    },
+    {
+      "source": "enc_attn_norm",
+      "source_port": null,
+      "target": "enc_ffn_residual",
+      "target_port": null
+    },
+    {
+      "source": "tgt_input",
+      "source_port": null,
+      "target": "tgt_embed",
+      "target_port": null
+    },
+    {
+      "source": "tgt_embed",
+      "source_port": null,
+      "target": "tgt_dropout",
+      "target_port": null
+    },
+    {
+      "source": "tgt_dropout",
+      "source_port": null,
+      "target": "dec_masked_self_attention",
+      "target_port": "query"
+    },
+    {
+      "source": "tgt_dropout",
+      "source_port": null,
+      "target": "dec_masked_self_attention",
+      "target_port": "key"
+    },
+    {
+      "source": "tgt_dropout",
+      "source_port": null,
+      "target": "dec_masked_self_attention",
+      "target_port": "value"
+    },
+    {
+      "source": "dec_masked_self_attention",
+      "source_port": null,
+      "target": "dec_self_attn_dropout",
+      "target_port": null
+    },
+    {
+      "source": "dec_self_attn_dropout",
+      "source_port": null,
+      "target": "dec_self_attn_residual",
+      "target_port": null
+    },
+    {
+      "source": "dec_self_attn_residual",
+      "source_port": null,
+      "target": "dec_self_attn_norm",
+      "target_port": null
+    },
+    {
+      "source": "tgt_dropout",
+      "source_port": null,
+      "target": "dec_self_attn_residual",
+      "target_port": null
+    },
+    {
+      "source": "dec_self_attn_norm",
+      "source_port": null,
+      "target": "dec_cross_attention",
+      "target_port": "query"
+    },
+    {
+      "source": "enc_ffn_norm",
+      "source_port": null,
+      "target": "dec_cross_attention",
+      "target_port": "key"
+    },
+    {
+      "source": "enc_ffn_norm",
+      "source_port": null,
+      "target": "dec_cross_attention",
+      "target_port": "value"
+    },
+    {
+      "source": "dec_cross_attention",
+      "source_port": null,
+      "target": "dec_cross_attn_dropout",
+      "target_port": null
+    },
+    {
+      "source": "dec_cross_attn_dropout",
+      "source_port": null,
+      "target": "dec_cross_attn_residual",
+      "target_port": null
+    },
+    {
+      "source": "dec_cross_attn_residual",
+      "source_port": null,
+      "target": "dec_cross_attn_norm",
+      "target_port": null
+    },
+    {
+      "source": "dec_self_attn_norm",
+      "source_port": null,
+      "target": "dec_cross_attn_residual",
+      "target_port": null
+    },
+    {
+      "source": "dec_cross_attn_norm",
+      "source_port": null,
+      "target": "dec_ffn_expand",
+      "target_port": null
+    },
+    {
+      "source": "dec_ffn_expand",
+      "source_port": null,
+      "target": "dec_ffn_relu",
+      "target_port": null
+    },
+    {
+      "source": "dec_ffn_relu",
+      "source_port": null,
+      "target": "dec_ffn_contract",
+      "target_port": null
+    },
+    {
+      "source": "dec_ffn_contract",
+      "source_port": null,
+      "target": "dec_ffn_dropout",
+      "target_port": null
+    },
+    {
+      "source": "dec_ffn_dropout",
+      "source_port": null,
+      "target": "dec_ffn_residual",
+      "target_port": null
+    },
+    {
+      "source": "dec_ffn_residual",
+      "source_port": null,
+      "target": "dec_ffn_norm",
+      "target_port": null
+    },
+    {
+      "source": "dec_cross_attn_norm",
+      "source_port": null,
+      "target": "dec_ffn_residual",
+      "target_port": null
+    },
+    {
+      "source": "dec_ffn_norm",
+      "source_port": null,
+      "target": "generator",
+      "target_port": null
+    },
+    {
+      "source": "generator",
+      "source_port": null,
+      "target": "softmax",
+      "target_port": null
+    }
+  ]
+}
