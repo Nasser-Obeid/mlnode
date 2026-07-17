@@ -1,0 +1,47 @@
+{
+  "mlnode_schema_version": "1.0",
+  "metadata": {
+    "name": "mnist_transformer",
+    "description": "TransformerEncoder classifier over MNIST rows-as-sequence (28 rows x 28 features)",
+    "author": "MLnode"
+  },
+  "input_shape": ["B", 28, 28],
+  "output_node": "classifier",
+  "nodes": [
+    { "id": "input", "type": "Input", "params": {} },
+    {
+      "id": "embed",
+      "type": "Linear",
+      "params": { "in_features": 28, "out_features": 64 }
+    },
+    {
+      "id": "encoder",
+      "type": "TransformerEncoder",
+      "params": {
+        "d_model": 64,
+        "nhead": 4,
+        "dim_feedforward": 128,
+        "dropout": 0.1,
+        "batch_first": true,
+        "num_layers": 2,
+        "norm": true
+      }
+    },
+    {
+      "id": "flatten",
+      "type": "Flatten",
+      "params": { "start_dim": 1 }
+    },
+    {
+      "id": "classifier",
+      "type": "Linear",
+      "params": { "in_features": 1792, "out_features": 10 }
+    }
+  ],
+  "edges": [
+    { "source": "input", "source_port": null, "target": "embed", "target_port": null },
+    { "source": "embed", "source_port": null, "target": "encoder", "target_port": null },
+    { "source": "encoder", "source_port": null, "target": "flatten", "target_port": null },
+    { "source": "flatten", "source_port": null, "target": "classifier", "target_port": null }
+  ]
+}

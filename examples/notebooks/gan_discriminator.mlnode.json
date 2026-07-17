@@ -1,0 +1,43 @@
+{
+  "mlnode_schema_version": "1.0",
+  "metadata": {
+    "name": "gan_discriminator",
+    "description": "DCGAN-style discriminator: image (B, 1, 28, 28) -> real/fake logit (B, 1)",
+    "author": "MLnode"
+  },
+  "input_shape": ["B", 1, 28, 28],
+  "output_node": "fc",
+  "nodes": [
+    { "id": "input", "type": "Input", "params": {} },
+    {
+      "id": "conv1",
+      "type": "Conv2d",
+      "params": { "in_channels": 1, "out_channels": 64, "kernel_size": 4, "stride": 2, "padding": 1 }
+    },
+    { "id": "lrelu1", "type": "LeakyReLU", "params": { "negative_slope": 0.2 } },
+    {
+      "id": "conv2",
+      "type": "Conv2d",
+      "params": { "in_channels": 64, "out_channels": 128, "kernel_size": 4, "stride": 2, "padding": 1 }
+    },
+    { "id": "bn2", "type": "BatchNorm2d", "params": { "num_features": 128 } },
+    { "id": "lrelu2", "type": "LeakyReLU", "params": { "negative_slope": 0.2 } },
+    { "id": "drop", "type": "Dropout", "params": { "p": 0.3 } },
+    { "id": "flatten", "type": "Flatten", "params": { "start_dim": 1 } },
+    {
+      "id": "fc",
+      "type": "Linear",
+      "params": { "in_features": 6272, "out_features": 1 }
+    }
+  ],
+  "edges": [
+    { "source": "input", "source_port": null, "target": "conv1", "target_port": null },
+    { "source": "conv1", "source_port": null, "target": "lrelu1", "target_port": null },
+    { "source": "lrelu1", "source_port": null, "target": "conv2", "target_port": null },
+    { "source": "conv2", "source_port": null, "target": "bn2", "target_port": null },
+    { "source": "bn2", "source_port": null, "target": "lrelu2", "target_port": null },
+    { "source": "lrelu2", "source_port": null, "target": "drop", "target_port": null },
+    { "source": "drop", "source_port": null, "target": "flatten", "target_port": null },
+    { "source": "flatten", "source_port": null, "target": "fc", "target_port": null }
+  ]
+}

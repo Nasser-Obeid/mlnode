@@ -1,42 +1,79 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "mlnode"
-version = "1.0"
-description = "JSON-described DAG → executable PyTorch nn.Module"
+dynamic = ["version"]
+description = "JSON-described DAG → executable PyTorch nn.Module, with static shape validation"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
-authors = [{ name = "MLnode Contributors" }]
+authors = [
+    { name = "Nasser Obeid", email = "nasserobeid8@gmail.com" },
+]
+keywords = [
+    "pytorch",
+    "deep-learning",
+    "neural-networks",
+    "dag",
+    "computational-graph",
+    "visual-programming",
+    "model-builder",
+    "json",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
 
+# torch >= 2.4 is required for nn.RMSNorm (registered in layers/registry.py).
 dependencies = [
-    "torch>=2.0",
-    "transformers>=4.30",
+    "torch>=2.4",
     "networkx>=3.0",
     "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
+# HuggingFace nodes (hf_model / hf_config) — pip install "mlnode[hf]"
+hf = [
+    "transformers>=4.30",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.4",
     "mypy>=1.10",
+    "transformers>=4.30",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Nasser-Obeid/MLnode"
+Repository = "https://github.com/Nasser-Obeid/MLnode"
+Issues = "https://github.com/Nasser-Obeid/MLnode/issues"
+Changelog = "https://github.com/Nasser-Obeid/MLnode/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/Nasser-Obeid/MLnode/tree/main/docs"
+Editor = "https://github.com/Nasser-Obeid/MLnode-editor"
+
+[tool.hatch.version]
+path = "src/mlnode/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mlnode"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/examples/notebooks/data",
+    "/.coverage",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

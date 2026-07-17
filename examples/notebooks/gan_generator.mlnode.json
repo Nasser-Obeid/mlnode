@@ -1,0 +1,49 @@
+{
+  "mlnode_schema_version": "1.0",
+  "metadata": {
+    "name": "gan_generator",
+    "description": "DCGAN-style generator: latent z (B, 100) -> fake MNIST digit (B, 1, 28, 28) in [-1, 1]",
+    "author": "MLnode"
+  },
+  "input_shape": ["B", 100],
+  "output_node": "tanh",
+  "nodes": [
+    { "id": "input", "type": "Input", "params": {} },
+    {
+      "id": "fc",
+      "type": "Linear",
+      "params": { "in_features": 100, "out_features": 6272 }
+    },
+    {
+      "id": "reshape",
+      "type": "Reshape",
+      "params": { "shape": [-1, 128, 7, 7] }
+    },
+    { "id": "bn0", "type": "BatchNorm2d", "params": { "num_features": 128 } },
+    { "id": "relu0", "type": "ReLU", "params": {} },
+    {
+      "id": "up1",
+      "type": "ConvTranspose2d",
+      "params": { "in_channels": 128, "out_channels": 64, "kernel_size": 4, "stride": 2, "padding": 1 }
+    },
+    { "id": "bn1", "type": "BatchNorm2d", "params": { "num_features": 64 } },
+    { "id": "relu1", "type": "ReLU", "params": {} },
+    {
+      "id": "up2",
+      "type": "ConvTranspose2d",
+      "params": { "in_channels": 64, "out_channels": 1, "kernel_size": 4, "stride": 2, "padding": 1 }
+    },
+    { "id": "tanh", "type": "Tanh", "params": {} }
+  ],
+  "edges": [
+    { "source": "input", "source_port": null, "target": "fc", "target_port": null },
+    { "source": "fc", "source_port": null, "target": "reshape", "target_port": null },
+    { "source": "reshape", "source_port": null, "target": "bn0", "target_port": null },
+    { "source": "bn0", "source_port": null, "target": "relu0", "target_port": null },
+    { "source": "relu0", "source_port": null, "target": "up1", "target_port": null },
+    { "source": "up1", "source_port": null, "target": "bn1", "target_port": null },
+    { "source": "bn1", "source_port": null, "target": "relu1", "target_port": null },
+    { "source": "relu1", "source_port": null, "target": "up2", "target_port": null },
+    { "source": "up2", "source_port": null, "target": "tanh", "target_port": null }
+  ]
+}

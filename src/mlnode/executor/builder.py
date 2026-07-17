@@ -11,7 +11,14 @@ import torch.nn as nn
 from mlnode.errors import MLnodeError
 from mlnode.layers.registry import build_layer
 from mlnode.parser.dag import ParsedGraph, ParsedNode
-from mlnode.schema.types import ELEMENTWISE_OPS, REDUCTION_OPS, TENSOR_OPS, ReductionType
+from mlnode.schema.types import (
+    ELEMENTWISE_OPS,
+    MULTI_INPUT_LAYERS,
+    REDUCTION_OPS,
+    TENSOR_OPS,
+    ReductionType,
+)
+from mlnode.utils import resolve_multi_inputs
 
 
 class MLnodeModule(nn.Module):
@@ -171,6 +178,23 @@ class MLnodeModule(nn.Module):
         if node_type == "Unsqueeze":
             dim = params["dim"]
             return incoming[0].unsqueeze(dim)
+
+        # Layers with several positional inputs (Transformer, TransformerDecoder,
+        # MultiheadAttention, Bilinear, …): order tensors by target_port and
+        # pass them as separate arguments — never reduced.
+        if node_type in MULTI_INPUT_LAYERS:
+            layer = self._layers[node.id] if node.id in self._layers else None
+            if layer is None:
+                raise MLnodeError(
+                    f"Node '{node.id}' ({node_type}): no layer found. "
+                    f"This type may not be registered."
+                )
+            edge_ports = [e.target_port for e in node.incoming_edges]
+            args = resolve_multi_inputs(node.id, node_type, edge_ports, incoming)
+            result = layer(*args)
+            if isinstance(result, tuple) and node_type in _TUPLE_OUTPUT_LAYERS:
+                result = result[0]
+            return result
 
         # Fallback reduction for non-reduction-op nodes with >1 input
         if len(incoming) > 1:

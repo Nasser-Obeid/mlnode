@@ -28,7 +28,18 @@ class ReductionType(str, Enum):
 REDUCTION_OPS = frozenset({"Add", "Subtract", "Multiply", "Divide", "Concat", "Stack",})
 
 # Elementwise reduction ops — all inputs must have identical shapes.
-ELEMENTWISE_OPS = frozenset({"Add", "Subtract", "Multiply", "Divide", "PixelShuffle", "PixelUnshuffle", })
+ELEMENTWISE_OPS = frozenset({"Add", "Subtract", "Multiply", "Divide"})
+
+# Layers whose forward() takes several positional tensor arguments.
+# Maps type → ordered input port names. Edges may set target_port to one of
+# these names; unlabeled edges fall back to declaration order.
+MULTI_INPUT_LAYERS: dict[str, tuple[str, ...]] = {
+    "Transformer": ("src", "tgt"),
+    "TransformerDecoder": ("tgt", "memory"),
+    "TransformerDecoderLayer": ("tgt", "memory"),
+    "MultiheadAttention": ("query", "key", "value"),
+    "Bilinear": ("input1", "input2"),
+}
 
 # Tensor manipulation ops that don't have learnable parameters.
 TENSOR_OPS = frozenset({
@@ -55,8 +66,7 @@ CORE_LAYER_TYPES = frozenset({
     "FractionalMaxPool2d", "FractionalMaxPool3d",
     "LPPool1d", "LPPool2d", "LPPool3d",
     "AdaptiveMaxPool1d", "AdaptiveMaxPool2d", "AdaptiveMaxPool3d",
-    "AdaptiveAvgPool1d", "AdaptiveAvgPool2d", "AdaptiveAvgPool3d",
-    
+
     # Non-linear Activations (weighted sum, nonlinearity)
     "ELU", "Hardshrink", "Hardsigmoid", "Hardtanh", "Hardswish",
     "LeakyReLU", "LogSigmoid", "PReLU", "ReLU6", "RReLU", "MultiheadAttention",
@@ -76,9 +86,10 @@ CORE_LAYER_TYPES = frozenset({
     "LayerNorm", "LocalResponseNorm", "RMSNorm",
     
     # Recurrent Layers
-    "RNNBase", "RNN", "LSTM", "GRU",
+    # (RNNBase is intentionally excluded: it is an abstract base with no forward())
+    "RNN", "LSTM", "GRU",
     "RNNCell", "LSTMCell", "GRUCell",
-    
+
     # Transformer Layers
     "Transformer", "TransformerEncoder", "TransformerDecoder",
     "TransformerEncoderLayer", "TransformerDecoderLayer",
@@ -95,13 +106,12 @@ CORE_LAYER_TYPES = frozenset({
     "Embedding", "EmbeddingBag",
 
     # Composable blocks
-    "Block", 
-    # Reduction ops
+    "Block",
+    # Reduction ops (elementwise: Add/Subtract/Multiply/Divide)
     "Add", "Subtract", "Multiply", "Divide", "Concat", "Stack",
-    # Element wise ops
-    "Add", "Subtract", "Multiply", "Divide", 
-    "PixelShuffle", "PixelUnshuffle", 
-    
+    # Vision ops
+    "PixelShuffle", "PixelUnshuffle",
+
     # Tensor ops
     "Flatten", "Reshape", "Permute", "Transpose", "View",
     "Unsqueeze", "Squeeze", "Split", 

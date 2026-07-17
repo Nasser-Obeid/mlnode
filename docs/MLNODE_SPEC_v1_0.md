@@ -8,7 +8,7 @@
 
 ```json
 {
-  "mlnode._schema_version": "1.0",
+  "mlnode_schema_version": "1.0",
   "metadata": {"name": "ResNet-50", "description": "Image classifier", "author": "alice"},
   "input_shape": ["B", 3, 224, 224],
   "output_node": "classifier",
@@ -29,8 +29,8 @@
 | Category | Types |
 |----------|-------|
 | I/O | `Input` — marks graph entry points (see §1.1). |
-| Core | `Linear`, `Conv1d/2d/3d`, `ConvTranspose*`, `ReLU`, `GELU`, `Sigmoid`, `Tanh`, `BatchNorm*`, `LayerNorm`, `GroupNorm`, `Dropout`, `MaxPool`, `AvgPool`, `AdaptivePool`, `Embedding`, `RNN`, `LSTM`, `GRU` |
-| Attention | `MultiheadAttention`, `TransformerEncoderLayer`, `TransformerDecoderLayer` |
+| Core | The `torch.nn` layer families: linear (`Linear`, `Bilinear`, `LazyLinear`, `Identity`), convolution (`Conv*`, `ConvTranspose*`, lazy variants, `Unfold`/`Fold`), pooling (`MaxPool*`, `AvgPool*`, `Adaptive*Pool*`, …), activations (`ReLU`, `GELU`, `Softmax`, …), normalization (`BatchNorm*`, `LayerNorm`, `GroupNorm`, `RMSNorm`, …), dropout, sparse (`Embedding`, `EmbeddingBag`), recurrent (`RNN`, `LSTM`, `GRU`, cells), vision (`PixelShuffle`, `PixelUnshuffle`). The authoritative list is `CORE_LAYER_TYPES` in `schema/types.py`; per-type shape-rule status is tracked in `docs/validation.md`. |
+| Attention | `MultiheadAttention`, `Transformer`, `TransformerEncoder`, `TransformerDecoder`, `TransformerEncoderLayer`, `TransformerDecoderLayer` — multi-input types take port-labeled edges (`src`/`tgt`, `tgt`/`memory`, `query`/`key`/`value`); unlabeled edges bind in declaration order. |
 | Reduction Ops | `Add`, `Concat`, `Stack`, `Subtract`, `Multiply`, `Divide` — reduction semantics are **implicit by type** (see §1.2). |
 | Tensor Ops | `Flatten`, `Reshape`, `Permute`, `Transpose`, `View`, `Unsqueeze`, `Squeeze`, `Split` |
 | HuggingFace | `hf_model` — loads pretrained weights. `hf_config` — instantiates randomly initialized model from config class (see §5). |
@@ -185,13 +185,15 @@ No auto-migration. Unsupported versions raise `SchemaVersionError`.
 ```python
 class MLnodeModel:
     @classmethod
-    def load(cls, path: str) -> MLnodeModel          # from .mlnode.json
+    def load(cls, path: str, block_registry=None) -> MLnodeModel       # from .mlnode.json
     @classmethod
-    def from_dict(cls, data: dict) -> MLnodeModel    # from dict
-    def validate(self) -> ValidationResult        # shape check, no GPU
-    def build(self) -> nn.Module                  # compile to executable PyTorch
-    def save(self, path: str) -> None             # to .mlnode.json
+    def from_dict(cls, data: dict, block_registry=None) -> MLnodeModel # from dict
+    def validate(self) -> ValidationResult            # shape check, no GPU
+    def build(self) -> nn.Module                      # compile to executable PyTorch
+    def save(self, path: str, *, expanded: bool = False) -> None  # to .mlnode.json
 ```
+
+`save()` preserves the original block structure by default; `expanded=True` writes the flattened graph. `block_registry` resolves `block_ref` nodes (defaults to the global registry).
 
 **Error hierarchy:** `MLnodeError` → `ValidationError` (`CycleDetectedError`, `ShapeMismatchError`) / `CustomLayerError` / `SchemaVersionError`
 

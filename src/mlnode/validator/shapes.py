@@ -9,14 +9,17 @@ from __future__ import annotations
 import math
 from typing import Any, Callable
 
+from mlnode.errors import MLnodeError
 from mlnode.parser.dag import ParsedGraph, ParsedNode
 from mlnode.schema.types import (
     ELEMENTWISE_OPS,
+    MULTI_INPUT_LAYERS,
     Dim,
     Shape,
     ShapeError,
     ValidationResult,
 )
+from mlnode.utils import resolve_multi_inputs
 
 # Type alias for shape transform functions.
 # Takes (input_shapes, node_params) → output_shape
@@ -299,8 +302,16 @@ def _passthrough_activation_shape(inputs: list[Shape], params: dict[str, Any]) -
 
 @register_shape("MultiheadAttention")
 def _mha_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
-    inp = inputs[0]  # query: (B, Seq, D) → (B, Seq, embed_dim)
-    return (inp[0], inp[1], params["embed_dim"])
+    # Inputs arrive port-ordered (query, key, value); output follows the query.
+    # Assumes batch_first=True: (B, Seq_q, D) → (B, Seq_q, embed_dim)
+    query = inputs[0]
+    embed_dim = params["embed_dim"]
+    q_dim = _resolve_dim(query[-1])
+    if q_dim is not None and q_dim != embed_dim:
+        raise ValueError(
+            f"query last dim {q_dim} does not match embed_dim {embed_dim}"
+        )
+    return (*query[:-1], embed_dim)
 
 @register_shape("GLU")
 @register_shape("AdaptiveLogSoftmaxWithLoss")
@@ -332,10 +343,11 @@ def _norm_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
 @register_shape("LazyBatchNorm2d")
 @register_shape("LazyBatchNorm3d")
 @register_shape("LazyInstanceNorm1d")
-@register_shape("LazyInstanceNorm1d")
-@register_shape("LazyInstanceNorm1d")
-def _Normalization_notimplemented_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
-    raise NotImplementedError
+@register_shape("LazyInstanceNorm2d")
+@register_shape("LazyInstanceNorm3d")
+def _lazy_norm_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
+    # Lazy norm layers infer num_features at runtime; shape is unchanged.
+    return inputs[0]
 
 
 
@@ -381,13 +393,40 @@ def _rnn_notimplemented_shape(inputs: list[Shape], params: dict[str, Any]) -> Sh
 # ══════════════════════════════════════════════
 
 
-@register_shape("Transformer")
+def _check_d_model(shape: Shape, d_model: int, role: str) -> None:
+    dim = _resolve_dim(shape[-1])
+    if dim is not None and dim != d_model:
+        raise ValueError(
+            f"{role} last dim {dim} does not match d_model {d_model}"
+        )
+
+
 @register_shape("TransformerEncoder")
-@register_shape("TransformerDecoder")
 @register_shape("TransformerEncoderLayer")
+def _transformer_encoder_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
+    # (B, Seq, d_model) → unchanged (assumes batch_first=True)
+    src = inputs[0]
+    _check_d_model(src, params["d_model"], "src")
+    return src
+
+
+@register_shape("TransformerDecoder")
 @register_shape("TransformerDecoderLayer")
-def _transformer_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
+def _transformer_decoder_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
+    # Port-ordered inputs (tgt, memory) → output follows tgt.
+    d_model = params["d_model"]
+    for role, shape in zip(("tgt", "memory"), inputs):
+        _check_d_model(shape, d_model, role)
     return inputs[0]
+
+
+@register_shape("Transformer")
+def _transformer_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
+    # Port-ordered inputs (src, tgt) → output follows tgt.
+    d_model = params.get("d_model", 512)
+    for role, shape in zip(("src", "tgt"), inputs):
+        _check_d_model(shape, d_model, role)
+    return inputs[-1]
 
 
 
@@ -401,16 +440,34 @@ def _identity_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
     return inputs[0]
 
 
-@register_shape("Bilinear")
 @register_shape("Linear")
 def _linear_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
     inp = inputs[0]
     return (*inp[:-1], params["out_features"])
 
 
-register_shape("LazyLinear")
-def _linear_notimplemented_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
-    raise NotImplementedError
+@register_shape("Bilinear")
+def _bilinear_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
+    # Port-ordered inputs (input1, input2); both share leading dims.
+    in1 = inputs[0]
+    for role, key, shape in (
+        ("input1", "in1_features", inputs[0]),
+        ("input2", "in2_features", inputs[-1]),
+    ):
+        expected = params.get(key)
+        actual = _resolve_dim(shape[-1])
+        if expected is not None and actual is not None and actual != expected:
+            raise ValueError(
+                f"{role} last dim {actual} does not match {key} {expected}"
+            )
+    return (*in1[:-1], params["out_features"])
+
+
+@register_shape("LazyLinear")
+def _lazy_linear_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
+    # in_features is inferred at runtime; output dim is known statically.
+    inp = inputs[0]
+    return (*inp[:-1], params["out_features"])
 
 
 
@@ -459,11 +516,8 @@ def _pixel_unshuffle_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape
     return (inp[0], inp[1] * (r * r), inp[2] // r, inp[3] // r)
 
 
-register_shape("Upsample")
-register_shape("UpsamplingNearest2d")
-register_shape("UpsamplingBilinear2d")
-def _vision_notimplemented_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
-    raise NotImplementedError
+# Upsample / UpsamplingNearest2d / UpsamplingBilinear2d: not yet supported
+# (also absent from CORE_LAYER_TYPES — add shape rules when they land).
 
 
 
@@ -718,6 +772,17 @@ class ShapeValidator:
                 ))
                 return None
             shapes.append(store[key])
+
+        # Mirror the executor: order multi-positional inputs by target_port
+        # so shape rules see (tgt, memory), (src, tgt), (query, key, value)…
+        if node.type in MULTI_INPUT_LAYERS and shapes:
+            edge_ports = [e.target_port for e in node.incoming_edges]
+            try:
+                shapes = resolve_multi_inputs(node.id, node.type, edge_ports, shapes)
+            except MLnodeError as e:
+                result.add_error(ShapeError(node_id=node.id, message=str(e)))
+                return None
+
         return shapes
 
     def _store_port_shapes(

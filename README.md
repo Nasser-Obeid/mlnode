@@ -2,15 +2,34 @@
 
 **JSON-described DAG → executable PyTorch `nn.Module`.**
 
-MLnode lets you define deep learning architectures as JSON graphs. It parses, validates, and compiles them into standard PyTorch modules you can train and deploy. No `exec()`, no `eval()`, no magic. The purpose of MLnode is to speed up the developement of ML and DL nueral networks, by eliminating the need to focus and more on the model architecture.
+MLnode lets you define deep learning architectures as JSON graphs. It parses, validates, and compiles them into standard PyTorch modules you can train and deploy. No `exec()`, no `eval()`, no magic. MLnode speeds up ML/DL development by letting you focus on the model architecture instead of the wiring code — and by catching shape errors statically, before a single tensor is allocated.
+
+Graphs can be written by hand, generated programmatically, or drawn visually in [mlnode-editor](https://github.com/Nasser-Obeid/MLnode-editor), the companion web editor that exports the same `.mlnode.json` format.
 
 ## Installation
 
 ```bash
-pip install -e ".[dev]"
+pip install mlnode            # core library
+pip install "mlnode[hf]"      # + HuggingFace nodes (transformers)
 ```
 
-Requires Python ≥ 3.11, PyTorch ≥ 2.0, Transformers ≥ 4.30, NetworkX ≥ 3.0, Pydantic ≥ 2.0.
+Requires Python ≥ 3.11. PyTorch ≥ 2.4, NetworkX ≥ 3.0, and Pydantic ≥ 2.0 are installed automatically.
+
+For development, clone [the repo](https://github.com/Nasser-Obeid/MLnode) and `pip install -e ".[dev]"` — or run `./setup.sh`, which checks the Python version, creates `.venv`, and installs everything.
+
+## Documentation
+
+| Doc | Contents |
+|-----|----------|
+| [QUICKSTART.md](https://github.com/Nasser-Obeid/MLnode/blob/main/QUICKSTART.md) | Zero to trained model in five minutes |
+| [docs/getting-started.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/getting-started.md) | Install, first model, validate/build/save, training |
+| [docs/json-schema.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/json-schema.md) | Complete `.mlnode.json` format reference |
+| [docs/api.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/api.md) | Python API reference for every public class |
+| [docs/validation.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/validation.md) | How static shape validation works |
+| [docs/blocks.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/blocks.md) | Reusable sub-graphs: inline blocks, `block_ref`, `BlockRegistry` |
+| [docs/custom-layers.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/custom-layers.md) | Plugging your own `nn.Module` classes into a graph |
+| [docs/huggingface.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/huggingface.md) | Pretrained and config-initialized HuggingFace nodes |
+| [docs/MLNODE_SPEC_v1_0.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/MLNODE_SPEC_v1_0.md) | The frozen v1.0 specification |
 
 ## Quick Start
 
@@ -159,9 +178,9 @@ Only `id`, `type`, and `params` are required. All other fields are optional.
 
 **`reduction`** / **`reduction_dim`** — Fallback reduction strategy for non-reduction-op nodes that receive multiple inputs. Only allowed on nodes whose type is NOT a reduction op (`Add`, `Concat`, etc.).
 
-**`hf_model`** — Load a pretrained HuggingFace model via `AutoModel.from_pretrained()`. Top-level field, not inside `params`.
+**`hf_model`** — Load a pretrained HuggingFace model via `AutoModel.from_pretrained()`. Top-level field, not inside `params`. Requires the `[hf]` extra: `pip install "mlnode[hf]"`.
 
-**`hf_config`** — Initialize from a HuggingFace config class (random weights, no download). Top-level field, not inside `params`.
+**`hf_config`** — Initialize from a HuggingFace config class (random weights, no download). Top-level field, not inside `params`. Requires the `[hf]` extra.
 
 **`path`** — Import path for custom layers (e.g. `"user.layers.MyLayer"`). Only valid when `type` is `"custom"`. The class must inherit `nn.Module`.
 
@@ -189,19 +208,37 @@ Only `id`, `type`, and `params` are required. All other fields are optional.
 | Category | Types |
 |----------|-------|
 | I/O | `Input` |
-| Linear & Conv | `Linear`, `Conv1d`, `Conv2d`, `Conv3d`, `ConvTranspose1d`, `ConvTranspose2d`, `ConvTranspose3d` |
-| Activation | `ReLU`, `GELU`, `Sigmoid`, `Tanh` |
-| Normalization | `BatchNorm1d`, `BatchNorm2d`, `BatchNorm3d`, `LayerNorm`, `GroupNorm` |
-| Regularization | `Dropout` |
-| Pooling | `MaxPool1d/2d/3d`, `AvgPool1d/2d/3d`, `AdaptiveAvgPool1d/2d/3d`, `AdaptiveMaxPool1d/2d/3d` |
-| Sequence | `Embedding`, `RNN`, `LSTM`, `GRU` |
-| Attention | `MultiheadAttention`, `TransformerEncoderLayer`, `TransformerDecoderLayer` |
+| Linear | `Linear`, `Bilinear`, `LazyLinear`, `Identity` |
+| Convolution | `Conv1d/2d/3d`, `ConvTranspose1d/2d/3d`, `LazyConv1d/2d/3d`*, `LazyConvTranspose1d/2d/3d`*, `Unfold`*, `Fold`* |
+| Pooling | `MaxPool1d/2d/3d`, `AvgPool1d/2d/3d`, `AdaptiveAvgPool1d/2d/3d`, `AdaptiveMaxPool1d/2d/3d`, `MaxUnpool1d/2d/3d`*, `FractionalMaxPool2d/3d`*, `LPPool1d/2d/3d`* |
+| Activation | `ReLU`, `ReLU6`, `GELU`, `SiLU`, `SELU`, `CELU`, `ELU`, `LeakyReLU`, `PReLU`, `RReLU`, `Sigmoid`, `Hardsigmoid`, `LogSigmoid`, `Tanh`, `Tanhshrink`, `Hardtanh`, `Hardswish`, `Hardshrink`, `Softplus`, `Softshrink`, `Softsign`, `Mish`, `Threshold`, `GLU`*, `Softmax`, `Softmin`, `Softmax2d`, `LogSoftmax`, `AdaptiveLogSoftmaxWithLoss`* |
+| Normalization | `BatchNorm1d/2d/3d`, `LazyBatchNorm1d/2d/3d`, `LayerNorm`, `GroupNorm`, `SyncBatchNorm`, `InstanceNorm1d/2d/3d`, `LazyInstanceNorm1d/2d/3d`, `LocalResponseNorm`, `RMSNorm` |
+| Dropout | `Dropout`, `Dropout1d/2d/3d`, `AlphaDropout`, `FeatureAlphaDropout` |
+| Sparse | `Embedding`, `EmbeddingBag` |
+| Recurrent | `RNN`, `LSTM`, `GRU`, `RNNCell`, `GRUCell`, `LSTMCell`* |
+| Attention | `MultiheadAttention`, `Transformer`, `TransformerEncoder`, `TransformerDecoder`, `TransformerEncoderLayer`, `TransformerDecoderLayer` |
+| Vision Ops | `PixelShuffle`, `PixelUnshuffle` |
 | Reduction Ops | `Add`, `Subtract`, `Multiply`, `Divide`, `Concat`, `Stack` |
 | Tensor Ops | `Flatten`, `Reshape`, `Permute`, `Transpose`, `View`, `Unsqueeze`, `Squeeze`, `Split` |
 | Composable | `Block` |
 | Custom | `custom` |
 
+\* Accepted by the schema and buildable, but the static shape rule is not implemented yet — graphs containing these types currently fail `validate()` (and therefore `build()`). See [docs/validation.md](https://github.com/Nasser-Obeid/MLnode/blob/main/docs/validation.md) for the full status table.
+
 Reduction ops have implicit reduction semantics — they accept multiple inputs without needing a `reduction` field. Setting `reduction` on a reduction op is an error.
+
+**Multi-input layers.** Some layers take several positional tensor arguments instead of being reduced. Label their incoming edges with `target_port`:
+
+| Type | Ports (in order) |
+|------|------------------|
+| `Transformer` | `src`, `tgt` |
+| `TransformerDecoder`, `TransformerDecoderLayer` | `tgt`, `memory` |
+| `MultiheadAttention` | `query`, `key`, `value` — one input means self-attention (`q=k=v`); two means `query` + shared `key`/`value` |
+| `Bilinear` | `input1`, `input2` |
+
+Unlabeled edges are assigned to ports in declaration order. `TransformerEncoder`/`TransformerDecoder` are built from flat layer params plus `num_layers` (default 6) and `norm` (bool — appends a final `LayerNorm`).
+
+All transformer/attention/RNN shape rules assume `batch_first: true` — set it in params (the editor does this by default).
 
 ### Symbolic Dimensions
 
@@ -284,6 +321,14 @@ Blocks can be chained (`res1 → res2`), nested (blocks containing blocks, up to
 
 ## Examples
 
+Runnable training notebooks live in `examples/notebooks/`:
+
+- `mlnode_mnist_training.ipynb` — CNN classifier on MNIST (`mnist_cnn.mlnode.json`)
+- `mlnode_transformer_training.ipynb` — TransformerEncoder classifier over MNIST rows-as-sequence (`mnist_transformer.mlnode.json`)
+- `mlnode_gan_training.ipynb` — DCGAN-style GAN where generator and discriminator are both MLnode graphs (`gan_generator.mlnode.json`, `gan_discriminator.mlnode.json`)
+
+All `.mlnode.json` files open directly in mlnode-editor (Import → auto-layout).
+
 ### ResNet Skip Connection
 
 ```json
@@ -362,11 +407,14 @@ Multiple Input nodes map to `forward(*args)` by declaration order in the `nodes`
 ## Running Tests
 
 ```bash
-pytest tests/ -v              # all 111 tests
-pytest tests/ --cov=mlnode    # with coverage (87%)
+pytest tests/ -v              # full suite (128 tests)
+pytest tests/ --cov=mlnode    # with coverage (~88%)
 pytest tests/unit/            # unit tests only
 pytest tests/integration/     # full pipeline tests
+pytest -m "not slow"          # skip tests that download HuggingFace models
 ```
+
+Markers: `slow` (downloads HuggingFace models), `gpu` (requires CUDA).
 
 ## Project Structure
 
@@ -381,17 +429,20 @@ src/mlnode/
 ├── parser/
 │   └── dag.py           # DAGParser → ParsedGraph (topo sort, cycle detection)
 ├── validator/
-│   └── shapes.py        # ShapeValidator with 45 shape transform rules
+│   └── shapes.py        # ShapeValidator with per-type shape transform rules
 ├── executor/
-│   └── builder.py       # ModuleBuilder → MLnode(nn.Module)
+│   └── builder.py       # ModuleBuilder → MLnodeModule(nn.Module)
 ├── layers/
 │   ├── registry.py      # Maps type strings to nn.Module constructors
 │   └── custom.py        # Custom layer validation (spec §4, steps 1-5)
 ├── blocks/
 │   ├── registry.py      # BlockRegistry for reusable block definitions
 │   └── expansion.py     # Flattens Block nodes into parent graph
-└── huggingface/
-    └── loader.py        # Pretrained and config-based HF model loading
+├── huggingface/
+│   └── loader.py        # Pretrained and config-based HF model loading
+└── utils/
+    └── __init__.py      # resolve_multi_inputs() — port binding shared by
+                         # the executor and the shape validator
 ```
 
 ## Design Principles

@@ -3,7 +3,7 @@
 JSON-described DAG → executable PyTorch nn.Module.
 """
 
-__version__ = "2.1.0"
+__version__ = "1.0.0"
 
 from mlnode.blocks.registry import BlockRegistry
 from mlnode.errors import (

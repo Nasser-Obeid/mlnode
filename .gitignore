@@ -1,4 +1,20 @@
+# Environments
 .venv/
-src/mlnode/huggingface
+
+# Python runtime / build artifacts
+__pycache__/
+*.py[cod]
+dist/
+build/
+*.egg-info/
+
+# Tool caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Local datasets & scratch space (not part of the library)
 data/
-tests/
+playground/

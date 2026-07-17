@@ -40,7 +40,7 @@ def _build_from_torch(cls: type[nn.Module], params: dict[str, Any]) -> nn.Module
 
 _TORCH_LAYER_MAP: dict[str, type[nn.Module]] = {
     
-    # Conv
+    # Convolution Layers
     "Conv1d": nn.Conv1d,
     "Conv2d": nn.Conv2d,
     "Conv3d": nn.Conv3d,
@@ -56,7 +56,7 @@ _TORCH_LAYER_MAP: dict[str, type[nn.Module]] = {
     "Unfold": nn.Unfold, 
     "Fold": nn.Fold,
 
-    # Pooling layers
+    # Pooling Layers
     "MaxPool1d": nn.MaxPool1d, 
     "MaxPool2d": nn.MaxPool2d, 
     "MaxPool3d": nn.MaxPool3d,
@@ -74,12 +74,9 @@ _TORCH_LAYER_MAP: dict[str, type[nn.Module]] = {
     "LPPool1d": nn.LPPool1d, 
     "LPPool2d": nn.LPPool2d, 
     "LPPool3d": nn.LPPool3d,
-    "AdaptiveMaxPool1d": nn.AdaptiveMaxPool1d, 
-    "AdaptiveMaxPool2d": nn.AdaptiveMaxPool2d, 
+    "AdaptiveMaxPool1d": nn.AdaptiveMaxPool1d,
+    "AdaptiveMaxPool2d": nn.AdaptiveMaxPool2d,
     "AdaptiveMaxPool3d": nn.AdaptiveMaxPool3d,
-    "AdaptiveAvgPool1d": nn.AdaptiveAvgPool1d, 
-    "AdaptiveAvgPool2d": nn.AdaptiveAvgPool2d, 
-    "AdaptiveAvgPool3d": nn.AdaptiveAvgPool3d,
 
     # Non-linear Activations (weighted sum, nonlinearity)
     "ELU": nn.ELU, 
@@ -87,11 +84,11 @@ _TORCH_LAYER_MAP: dict[str, type[nn.Module]] = {
     "Hardsigmoid": nn.Hardsigmoid, 
     "Hardtanh": nn.Hardtanh, 
     "Hardswish": nn.Hardswish,
-    "LeakyReLU": nn.LeakyReLU, 
-    "LogSigmoid": nn.LogSigmoid, 
-    "PReLU": nn.PReLU, 
-    "ReLU6": nn.ReLU6, 
-    "RReLU": nn.PReLU,
+    "LeakyReLU": nn.LeakyReLU,
+    "LogSigmoid": nn.LogSigmoid,
+    "PReLU": nn.PReLU,
+    "ReLU6": nn.ReLU6,
+    "RReLU": nn.RReLU,
     "MultiheadAttention": nn.MultiheadAttention,
     "SELU": nn.SELU, 
     "CELU": nn.CELU, 
@@ -119,6 +116,9 @@ _TORCH_LAYER_MAP: dict[str, type[nn.Module]] = {
     "BatchNorm1d": nn.BatchNorm1d,
     "BatchNorm2d": nn.BatchNorm2d,
     "BatchNorm3d": nn.BatchNorm3d,
+    "LazyBatchNorm1d": nn.LazyBatchNorm1d,
+    "LazyBatchNorm2d": nn.LazyBatchNorm2d,
+    "LazyBatchNorm3d": nn.LazyBatchNorm3d,
     "LayerNorm": nn.LayerNorm,
     "GroupNorm": nn.GroupNorm,
     "SyncBatchNorm": nn.SyncBatchNorm,
@@ -132,18 +132,18 @@ _TORCH_LAYER_MAP: dict[str, type[nn.Module]] = {
     "RMSNorm": nn.RMSNorm,
     
     # Recurrent Layers
-    "RNNBase": nn.RNNBase,
+    # (RNNBase excluded: abstract base class without forward())
     "RNN": nn.RNN,
     "LSTM": nn.LSTM,
     "GRU": nn.GRU,
-    "RNNCell": nn.RNNCell, 
-    "LSTMCell": nn.LSTMCell, 
+    "RNNCell": nn.RNNCell,
+    "LSTMCell": nn.LSTMCell,
     "GRUCell": nn.GRUCell,
 
     # Transformer Layers
-    "Transformer": nn.Transformer, 
-    "TransformerEncoder": nn.TransformerEncoder, 
-    "TransformerDecoder": nn.TransformerDecoder,
+    # TransformerEncoder/TransformerDecoder need composed construction —
+    # they are registered below with dedicated builders.
+    "Transformer": nn.Transformer,
     "TransformerEncoderLayer": nn.TransformerEncoderLayer,
     "TransformerDecoderLayer": nn.TransformerDecoderLayer,
 
@@ -162,21 +162,48 @@ _TORCH_LAYER_MAP: dict[str, type[nn.Module]] = {
     "FeatureAlphaDropout": nn.FeatureAlphaDropout,
 
     # Sparse Layers
-    "Embedding": nn.Embedding, 
+    "Embedding": nn.Embedding,
     "EmbeddingBag": nn.EmbeddingBag,
+
+    # Vision Layers
+    "PixelShuffle": nn.PixelShuffle,          # params: upscale_factor
+    "PixelUnshuffle": nn.PixelUnshuffle,      # params: downscale_factor
 }
 
 # Auto-register all torch layers
 for _name, _cls in _TORCH_LAYER_MAP.items():
     _LAYER_REGISTRY[_name] = lambda params, cls=_cls: _build_from_torch(cls, params)
 
-@register_layer("PixelShuffle")
-def _build_pixel_shuffle(params):
-    return nn.PixelShuffle(upscale_factor=params["upscale_factor"])
 
-@register_layer("PixelUnshuffle")
-def _build_pixel_unshuffle(params):
-    return nn.PixelUnshuffle(downscale_factor=params["upscale_factor"])
+# ──────────────────────────────────────────────
+# Composed transformer stacks
+#
+# nn.TransformerEncoder/Decoder take a *layer instance* + num_layers, which
+# cannot come straight from JSON params. These builders accept the flat
+# TransformerEncoderLayer/DecoderLayer params plus:
+#   num_layers (int, default 6) — how many stacked layers
+#   norm       (bool, default False) — append a final LayerNorm(d_model)
+# The same flat params are what mlnode-editor emits for these node types.
+# ──────────────────────────────────────────────
+
+@register_layer("TransformerEncoder")
+def _build_transformer_encoder(params: dict[str, Any]) -> nn.Module:
+    p = dict(params)
+    num_layers = p.pop("num_layers", 6)
+    final_norm = p.pop("norm", False)
+    layer = nn.TransformerEncoderLayer(**p)
+    norm = nn.LayerNorm(layer.self_attn.embed_dim) if final_norm else None
+    return nn.TransformerEncoder(layer, num_layers=num_layers, norm=norm)
+
+
+@register_layer("TransformerDecoder")
+def _build_transformer_decoder(params: dict[str, Any]) -> nn.Module:
+    p = dict(params)
+    num_layers = p.pop("num_layers", 6)
+    final_norm = p.pop("norm", False)
+    layer = nn.TransformerDecoderLayer(**p)
+    norm = nn.LayerNorm(layer.self_attn.embed_dim) if final_norm else None
+    return nn.TransformerDecoder(layer, num_layers=num_layers, norm=norm)
 
 
 
