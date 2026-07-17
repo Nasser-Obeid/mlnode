@@ -29,15 +29,15 @@ For development, clone [the repo](https://github.com/Nasser-Obeid/mlnode) and `p
 | [docs/blocks.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/blocks.md) | Reusable sub-graphs: inline blocks, `block_ref`, `BlockRegistry` |
 | [docs/custom-layers.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/custom-layers.md) | Plugging your own `nn.Module` classes into a graph |
 | [docs/huggingface.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/huggingface.md) | Pretrained and config-initialized HuggingFace nodes |
-| [docs/mlnode_SPEC_v1_0.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/mlnode_SPEC_v1_0.md) | The frozen v1.0 specification |
+| [docs/MLNODE_SPEC_v1_0.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/MLNODE_SPEC_v1_0.md) | The frozen v1.0 specification |
 
 ## Quick Start
 
 ```python
-from mlnode import mlnodeModel
+from mlnode import MLnodeModel
 import torch
 
-model = mlnodeModel.from_dict({
+model = MLnodeModel.from_dict({
     "mlnode_schema_version": "1.0",
     "input_shape": ["B", 10],
     "output_node": "fc",
@@ -73,16 +73,16 @@ JSON → Parser → Validator → Executor → nn.Module
 
 ## API Reference
 
-### mlnodeModel
+### MLnodeModel
 
 The top-level class tying everything together.
 
 ```python
-class mlnodeModel:
+class MLnodeModel:
     @classmethod
-    def load(cls, path: str, block_registry=None) -> mlnodeModel
+    def load(cls, path: str, block_registry=None) -> MLnodeModel
     @classmethod
-    def from_dict(cls, data: dict, block_registry=None) -> mlnodeModel
+    def from_dict(cls, data: dict, block_registry=None) -> MLnodeModel
     def validate(self) -> ValidationResult
     def build(self) -> nn.Module
     def save(self, path: str, *, expanded: bool = False) -> None
@@ -112,13 +112,13 @@ registry.register("resnet_block", BlockDefinition.model_validate({
 }))
 registry.register_from_file("transformer_block", "blocks/transformer.json")
 
-model = mlnodeModel.load("model.mlnode.json", block_registry=registry)
+model = MLnodeModel.load("model.mlnode.json", block_registry=registry)
 ```
 
 ### Error Hierarchy
 
 ```
-mlnodeError
+MLnodeError
 ├── ValidationError
 │   ├── CycleDetectedError
 │   └── ShapeMismatchError
@@ -380,7 +380,7 @@ All `.mlnode.json` files open directly in mlnode-editor (Import → auto-layout)
 ### Multi-Input Graph
 
 ```python
-model = mlnodeModel.from_dict({
+model = MLnodeModel.from_dict({
     "mlnode_schema_version": "1.0",
     "input_shape": ["B", 32],
     "output_node": "add",
@@ -421,7 +421,7 @@ Markers: `slow` (downloads HuggingFace models), `gpu` (requires CUDA).
 ```
 src/mlnode/
 ├── __init__.py          # Public API exports
-├── model.py             # mlnodeModel — top-level API
+├── model.py             # MLnodeModel — top-level API
 ├── errors.py            # Error hierarchy
 ├── schema/
 │   ├── models.py        # Pydantic models (GraphSchema, NodeSchema, EdgeSchema, BlockDefinition)
@@ -431,7 +431,7 @@ src/mlnode/
 ├── validator/
 │   └── shapes.py        # ShapeValidator with per-type shape transform rules
 ├── executor/
-│   └── builder.py       # ModuleBuilder → mlnodeModule(nn.Module)
+│   └── builder.py       # ModuleBuilder → MLnodeModule(nn.Module)
 ├── layers/
 │   ├── registry.py      # Maps type strings to nn.Module constructors
 │   └── custom.py        # Custom layer validation (spec §4, steps 1-5)
