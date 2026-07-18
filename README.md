@@ -1,10 +1,22 @@
-# mlnode
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Nasser-Obeid/MLnode/main/docs/assets/logo.png" alt="mlnode" width="340">
+</p>
 
-**JSON-described DAG → executable PyTorch `nn.Module`.**
+<p align="center"><b>JSON-described DAG → executable PyTorch <code>nn.Module</code></b></p>
 
 mlnode lets you define deep learning architectures as JSON graphs. It parses, validates, and compiles them into standard PyTorch modules you can train and deploy. No `exec()`, no `eval()`, no magic. mlnode speeds up ML/DL development by letting you focus on the model architecture instead of the wiring code — and by catching shape errors statically, before a single tensor is allocated.
 
 Graphs can be written by hand, generated programmatically, or drawn visually in [mlnode-editor](https://github.com/Nasser-Obeid/mlnode-editor), the companion web editor that exports the same `.mlnode.json` format.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Nasser-Obeid/MLnode/main/docs/assets/attention_is_all_you_need.png" alt="Figure 1 from 'Attention Is All You Need'" width="380">
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Nasser-Obeid/MLnode/main/docs/assets/attention_graph.png" alt="The same Transformer drawn as a DAG in mlnode-editor" width="100%">
+</p>
+
+<p align="center"><sub>Figure 1 of <a href="https://arxiv.org/abs/1706.03762"><i>Attention Is All You Need</i></a> — and the same architecture drawn in mlnode-editor. The graph is <a href="https://github.com/Nasser-Obeid/mlnode/blob/main/examples/attention_is_all_you_need.mlnode.json"><code>examples/attention_is_all_you_need.mlnode.json</code></a>: it validates, builds, and runs as a 45M-parameter <code>nn.Module</code>, with the paper's tied source/target embeddings (<code>shared_id</code>), Q/K/V-labeled attention edges, and encoder→decoder cross-attention.</sub></p>
 
 ## Installation
 
@@ -326,6 +338,8 @@ Runnable training notebooks live in `examples/notebooks/`:
 - `mlnode_mnist_training.ipynb` — CNN classifier on MNIST (`mnist_cnn.mlnode.json`)
 - `mlnode_transformer_training.ipynb` — TransformerEncoder classifier over MNIST rows-as-sequence (`mnist_transformer.mlnode.json`)
 - `mlnode_gan_training.ipynb` — DCGAN-style GAN where generator and discriminator are both mlnode graphs (`gan_generator.mlnode.json`, `gan_discriminator.mlnode.json`)
+
+Standalone graphs live in `examples/`: `attention_is_all_you_need.mlnode.json` (the images at the top of this README), `resnet_block.mlnode.json`, and `stacked_blocks.mlnode.json`.
 
 All `.mlnode.json` files open directly in mlnode-editor (Import → auto-layout).
 
