@@ -335,6 +335,7 @@ Blocks can be chained (`res1 → res2`), nested (blocks containing blocks, up to
 
 Runnable training notebooks live in `examples/notebooks/`:
 
+- `mlnode_house_prices_training.ipynb` — MLP regressor on California Housing, the simplest end-to-end run (`house_prices_mlp.mlnode.json`)
 - `mlnode_mnist_training.ipynb` — CNN classifier on MNIST (`mnist_cnn.mlnode.json`)
 - `mlnode_transformer_training.ipynb` — TransformerEncoder classifier over MNIST rows-as-sequence (`mnist_transformer.mlnode.json`)
 - `mlnode_gan_training.ipynb` — DCGAN-style GAN where generator and discriminator are both mlnode graphs (`gan_generator.mlnode.json`, `gan_discriminator.mlnode.json`)

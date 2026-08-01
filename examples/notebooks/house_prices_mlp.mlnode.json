@@ -1,0 +1,84 @@
+{
+  "mlnode_schema_version": "1.0",
+  "metadata": {
+    "name": "House Prices MLP"
+  },
+  "input_shape": [
+    "B",
+    8
+  ],
+  "output_node": "price",
+  "nodes": [
+    {
+      "id": "input_0",
+      "type": "Input",
+      "params": {}
+    },
+    {
+      "id": "fc1",
+      "type": "Linear",
+      "params": {
+        "in_features": 8,
+        "out_features": 64
+      }
+    },
+    {
+      "id": "relu1",
+      "type": "ReLU",
+      "params": {}
+    },
+    {
+      "id": "fc2",
+      "type": "Linear",
+      "params": {
+        "in_features": 64,
+        "out_features": 32
+      }
+    },
+    {
+      "id": "relu2",
+      "type": "ReLU",
+      "params": {}
+    },
+    {
+      "id": "price",
+      "type": "Linear",
+      "params": {
+        "in_features": 32,
+        "out_features": 1
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "input_0",
+      "source_port": null,
+      "target": "fc1",
+      "target_port": null
+    },
+    {
+      "source": "fc1",
+      "source_port": null,
+      "target": "relu1",
+      "target_port": null
+    },
+    {
+      "source": "relu1",
+      "source_port": null,
+      "target": "fc2",
+      "target_port": null
+    },
+    {
+      "source": "fc2",
+      "source_port": null,
+      "target": "relu2",
+      "target_port": null
+    },
+    {
+      "source": "relu2",
+      "source_port": null,
+      "target": "price",
+      "target_port": null
+    }
+  ]
+}
