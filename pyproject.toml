@@ -61,7 +61,8 @@ Repository = "https://github.com/Nasser-Obeid/MLnode"
 Issues = "https://github.com/Nasser-Obeid/MLnode/issues"
 Changelog = "https://github.com/Nasser-Obeid/MLnode/blob/main/CHANGELOG.md"
 Documentation = "https://github.com/Nasser-Obeid/MLnode/tree/main/docs"
-Editor = "https://github.com/Nasser-Obeid/MLnode-editor"
+Editor = "https://nasser-obeid.github.io/mlnode-editor/"
+"Editor source" = "https://github.com/Nasser-Obeid/mlnode-editor"
 
 [tool.hatch.version]
 path = "src/mlnode/__init__.py"

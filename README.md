@@ -6,7 +6,7 @@
 
 mlnode lets you define deep learning architectures as JSON graphs. It parses, validates, and compiles them into standard PyTorch modules you can train and deploy. No `exec()`, no `eval()`, no magic. mlnode speeds up ML/DL development by letting you focus on the model architecture instead of the wiring code — and by catching shape errors statically, before a single tensor is allocated.
 
-Graphs can be written by hand, generated programmatically, or drawn visually in [mlnode-editor](https://github.com/Nasser-Obeid/mlnode-editor), the companion web editor that exports the same `.mlnode.json` format.
+Graphs can be written by hand, generated programmatically, or drawn visually in **[mlnode-editor](https://nasser-obeid.github.io/mlnode-editor/)** ([source](https://github.com/Nasser-Obeid/mlnode-editor)), the companion web editor that exports the same `.mlnode.json` format. It runs entirely in your browser — nothing to install.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Nasser-Obeid/MLnode/main/docs/assets/attention_is_all_you_need.png" alt="Figure 1 from 'Attention Is All You Need'" width="380">
@@ -342,7 +342,7 @@ Runnable training notebooks live in `examples/notebooks/`:
 
 Standalone graphs live in `examples/`: `attention_is_all_you_need.mlnode.json` (the images at the top of this README), `resnet_block.mlnode.json`, and `stacked_blocks.mlnode.json`.
 
-All `.mlnode.json` files open directly in mlnode-editor (Import → auto-layout).
+All `.mlnode.json` files open directly in [mlnode-editor](https://nasser-obeid.github.io/mlnode-editor/) (Import → auto-layout).
 
 ### ResNet Skip Connection
 
