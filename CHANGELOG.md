@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-08-02
+
+Documentation and packaging metadata only — no library code changed.
+
+### Changed
+
+- The `Editor` project URL now points at the **hosted** editor,
+  <https://nasser-obeid.github.io/mlnode-editor/>, which runs entirely in the
+  browser; the repository moved to a separate `Editor source` URL.
+- README links the live editor, and this release refreshes the PyPI project
+  page with the logo and Transformer showcase added after 1.0.0 shipped.
+
 ## [1.0.0] — 2026-07-18
 
 First public release on PyPI: `pip install mlnode`.

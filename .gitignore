@@ -18,3 +18,7 @@ htmlcov/
 # Local datasets & scratch space (not part of the library)
 data/
 playground/
+
+# Trained weights produced by the example notebooks. Hatchling builds the
+# sdist from .gitignore, so anything left here would ship inside the release.
+*.pth
