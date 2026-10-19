@@ -5,6 +5,7 @@ Responsibilities (spec §2):
 - Detect cycles and self-loops → CycleDetectedError.
 - Compute topological execution order.
 - Resolve edge ports into the store key format.
+- Resolve JSON custom layer nodes into nested parsed sub-graphs.
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ from typing import Any
 
 import networkx as nx
 
-from mlnode.errors import CycleDetectedError, ValidationError
-from mlnode.schema.models import EdgeSchema, GraphSchema, NodeSchema
+from mlnode.errors import CustomLayerError, CycleDetectedError, ValidationError
+from mlnode.schema.models import GraphSchema, NodeSchema
 
 
 @dataclass
@@ -67,6 +68,8 @@ class ParsedGraph:
     nodes: dict[str, ParsedNode]
     execution_order: list[str]
     nx_graph: nx.DiGraph
+    # JSON custom layer node id → its parsed sub-graph (params already bound).
+    custom_layers: dict[str, ParsedGraph] = field(default_factory=dict)
 
     @property
     def input_nodes(self) -> list[ParsedNode]:
@@ -77,24 +80,38 @@ class DAGParser:
     """Parses a MLnode JSON graph into a validated DAG structure."""
 
     @staticmethod
-    def parse_file(path: str | Path, block_registry: Any | None = None) -> ParsedGraph:
+    def parse_file(
+        path: str | Path,
+        block_registry: Any | None = None,
+        layer_registry: Any | None = None,
+    ) -> ParsedGraph:
         """Load and parse a .mlnode.json file."""
         path = Path(path)
-        with path.open() as f:
+        with path.open(encoding="utf-8") as f:
             data = json.load(f)
-        return DAGParser.parse_dict(data, block_registry)
+        return DAGParser.parse_dict(data, block_registry, layer_registry)
 
     @staticmethod
-    def parse_dict(data: dict[str, Any], block_registry: Any | None = None) -> ParsedGraph:
+    def parse_dict(
+        data: dict[str, Any],
+        block_registry: Any | None = None,
+        layer_registry: Any | None = None,
+    ) -> ParsedGraph:
         """Parse a graph from a dictionary."""
         schema = GraphSchema.model_validate(data)
-        return DAGParser.parse_schema(schema, block_registry)
+        return DAGParser.parse_schema(schema, block_registry, layer_registry)
 
     @staticmethod
-    def parse_schema(schema: GraphSchema, block_registry: Any | None = None) -> ParsedGraph:
+    def parse_schema(
+        schema: GraphSchema,
+        block_registry: Any | None = None,
+        layer_registry: Any | None = None,
+        _depth: int = 0,
+    ) -> ParsedGraph:
         """Parse a validated GraphSchema into a DAG.
 
         Block nodes are expanded into flat nodes before DAG construction.
+        JSON custom layer nodes are parsed recursively into sub-graphs.
         """
         # Expand blocks before building the graph
         has_blocks = any(n.type == "Block" for n in schema.nodes)
@@ -164,9 +181,54 @@ class DAGParser:
                             node_id=node_id,
                         )
 
+        custom_layers = DAGParser._parse_custom_layers(
+            schema, block_registry, layer_registry, _depth
+        )
+
         return ParsedGraph(
             schema=schema,
             nodes=nodes,
             execution_order=execution_order,
             nx_graph=G,
+            custom_layers=custom_layers,
         )
+
+    @staticmethod
+    def _parse_custom_layers(
+        schema: GraphSchema,
+        block_registry: Any | None,
+        layer_registry: Any | None,
+        depth: int,
+    ) -> dict[str, ParsedGraph]:
+        """Bind and parse the sub-graph of every JSON custom layer node."""
+        from mlnode.layers.json_layers import (
+            MAX_LAYER_DEPTH,
+            instantiate_layer,
+            resolve_layer_definition,
+        )
+
+        parsed: dict[str, ParsedGraph] = {}
+        for node in schema.nodes:
+            if node.type != "custom" or node.layer is None:
+                continue
+            if depth >= MAX_LAYER_DEPTH:
+                raise CustomLayerError(
+                    f"Node '{node.id}': custom layer nesting depth exceeded "
+                    f"{MAX_LAYER_DEPTH}. Check for layers that reference themselves.",
+                    node_id=node.id,
+                )
+            definition = resolve_layer_definition(node, schema.custom_layers, layer_registry)
+            sub_schema = instantiate_layer(node, definition, schema)
+            try:
+                parsed[node.id] = DAGParser.parse_schema(
+                    sub_schema, block_registry, layer_registry, depth + 1
+                )
+            except CustomLayerError:
+                raise
+            except Exception as e:
+                raise CustomLayerError(
+                    f"Node '{node.id}' (layer '{node.layer}'): {e}",
+                    node_id=node.id,
+                    original_error=e,
+                ) from e
+        return parsed

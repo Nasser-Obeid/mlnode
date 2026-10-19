@@ -8,7 +8,7 @@
 | [api.md](api.md) | Python API reference for every public class |
 | [validation.md](validation.md) | How static shape validation works, rule status per type |
 | [blocks.md](blocks.md) | Reusable sub-graphs: inline blocks, `block_ref`, `BlockRegistry` |
-| [custom-layers.md](custom-layers.md) | Plugging your own `nn.Module` classes into a graph |
+| [custom-layers.md](custom-layers.md) | Custom layers defined in JSON (schema 1.1), or as your own `nn.Module` classes |
 | [huggingface.md](huggingface.md) | Pretrained and config-initialized HuggingFace nodes |
 | [MLNODE_SPEC_v1_0.md](MLNODE_SPEC_v1_0.md) | The frozen v1.0 specification |
 

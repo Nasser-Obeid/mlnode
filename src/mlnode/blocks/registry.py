@@ -42,7 +42,7 @@ class BlockRegistry:
     def register_from_file(self, name: str, path: str | Path) -> None:
         """Register a block from a JSON file."""
         path = Path(path)
-        with path.open() as f:
+        with path.open(encoding="utf-8") as f:
             data = json.load(f)
         self.register_from_dict(name, data)
 

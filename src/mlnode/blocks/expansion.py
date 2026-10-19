@@ -182,6 +182,7 @@ def expand_blocks(
         output_node=output_node,
         nodes=new_nodes,
         edges=new_edges,
+        custom_layers=schema.custom_layers,
     )
 
     # Recurse for nested blocks

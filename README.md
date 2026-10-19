@@ -25,9 +25,21 @@ pip install mlnode            # core library
 pip install "mlnode[hf]"      # + HuggingFace nodes (transformers)
 ```
 
-Requires Python ≥ 3.11. PyTorch ≥ 2.4, NetworkX ≥ 3.0, and Pydantic ≥ 2.0 are installed automatically.
+Supports Python 3.11–3.15 on Linux and Windows. PyTorch ≥ 2.4, NetworkX ≥ 3.0, and Pydantic ≥ 2.0 are installed automatically (Python 3.14+ raises the floors to the first releases with wheels for it).
 
-For development, clone [the repo](https://github.com/Nasser-Obeid/mlnode) and `pip install -e ".[dev]"` — or run `./setup.sh`, which checks the Python version, creates `.venv`, and installs everything.
+**Python 3.15:** PyPI does not carry PyTorch wheels for 3.15 yet; PyTorch publishes them on its own index. Install torch from there first, then mlnode:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu   # or a CUDA index, e.g. .../whl/cu128
+pip install mlnode
+```
+
+For development, clone [the repo](https://github.com/Nasser-Obeid/mlnode) and `pip install -e ".[dev]"` — or run the setup script, which checks the Python version, creates `.venv`, installs everything (including torch from the PyTorch index on 3.15), and runs the tests:
+
+```bash
+./setup.sh                                          # Linux / macOS / Git Bash
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 # Windows
+```
 
 ## Documentation
 
@@ -39,7 +51,7 @@ For development, clone [the repo](https://github.com/Nasser-Obeid/mlnode) and `p
 | [docs/api.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/api.md) | Python API reference for every public class |
 | [docs/validation.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/validation.md) | How static shape validation works |
 | [docs/blocks.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/blocks.md) | Reusable sub-graphs: inline blocks, `block_ref`, `BlockRegistry` |
-| [docs/custom-layers.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/custom-layers.md) | Plugging your own `nn.Module` classes into a graph |
+| [docs/custom-layers.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/custom-layers.md) | Custom layers defined in JSON, or as your own `nn.Module` classes |
 | [docs/huggingface.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/huggingface.md) | Pretrained and config-initialized HuggingFace nodes |
 | [docs/MLNODE_SPEC_v1_0.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/MLNODE_SPEC_v1_0.md) | The frozen v1.0 specification |
 
@@ -194,7 +206,9 @@ Only `id`, `type`, and `params` are required. All other fields are optional.
 
 **`hf_config`** — Initialize from a HuggingFace config class (random weights, no download). Top-level field, not inside `params`. Requires the `[hf]` extra.
 
-**`path`** — Import path for custom layers (e.g. `"user.layers.MyLayer"`). Only valid when `type` is `"custom"`. The class must inherit `nn.Module`.
+**`path`** — Import path for Python custom layers (e.g. `"user.layers.MyLayer"`). Only valid when `type` is `"custom"`. The class must inherit `nn.Module`.
+
+**`layer`** — Name of a JSON custom layer (schema `1.1`), defined in the file's `custom_layers` or a `LayerRegistry`. Only valid when `type` is `"custom"`; a custom node takes `path` or `layer`.
 
 **`block`** — Inline sub-graph definition for `Block` type nodes. Contains `input_node`, `output_node`, `nodes`, `edges`.
 
@@ -269,7 +283,45 @@ Symbolic dims propagate through the graph. `Conv2d` with input `(B, 3, 224, 224)
 
 ## Custom Layers
 
-Custom layers are Python classes that inherit `nn.Module`. mlnode validates them by:
+### JSON Layers
+
+Define a layer once in JSON — a parameterized sub-graph — and use it like any built-in type. Requires `"mlnode_schema_version": "1.1"`.
+
+```json
+{
+  "mlnode_schema_version": "1.1",
+  "input_shape": ["B", 16],
+  "output_node": "ffn",
+  "custom_layers": {
+    "MLP": {
+      "params": {"dim": {"type": "int"}, "expansion": {"type": "int", "default": 4}},
+      "nodes": [
+        {"id": "x",   "type": "Input"},
+        {"id": "fc1", "type": "Linear", "params": {"in_features": "$dim", "out_features": "${dim * expansion}"}},
+        {"id": "act", "type": "GELU"},
+        {"id": "fc2", "type": "Linear", "params": {"in_features": "${dim * expansion}", "out_features": "$dim"}}
+      ],
+      "edges": [
+        {"source": "x", "target": "fc1"},
+        {"source": "fc1", "target": "act"},
+        {"source": "act", "target": "fc2"}
+      ],
+      "output_node": "fc2"
+    }
+  },
+  "nodes": [
+    {"id": "input", "type": "Input"},
+    {"id": "ffn", "type": "custom", "layer": "MLP", "params": {"dim": 16}}
+  ],
+  "edges": [{"source": "input", "target": "ffn"}]
+}
+```
+
+Params are declared with types and defaults and checked when the file loads. `"$dim"` substitutes a param and `"${dim * expansion}"` evaluates safe arithmetic (no `eval()`). Layers can have several inputs, nest other layers, and live in a shared `LayerRegistry`. Each use is validated through its sub-graph and built as a nested `nn.Module`. See [docs/custom-layers.md](https://github.com/Nasser-Obeid/mlnode/blob/main/docs/custom-layers.md) and [examples/models/custom_layers.mlnode.json](https://github.com/Nasser-Obeid/mlnode/blob/main/examples/models/custom_layers.mlnode.json).
+
+### Python Layers
+
+Python custom layers are classes that inherit `nn.Module`. mlnode validates them by:
 
 1. Importing the class via `importlib` (no `exec`/`eval`)
 2. Verifying it inherits `nn.Module`
@@ -422,8 +474,8 @@ Multiple Input nodes map to `forward(*args)` by declaration order in the `nodes`
 ## Running Tests
 
 ```bash
-pytest tests/ -v              # full suite (128 tests)
-pytest tests/ --cov=mlnode    # with coverage (~88%)
+pytest tests/ -v              # full suite (237 tests)
+pytest tests/ --cov=mlnode    # with coverage (~90%)
 pytest tests/unit/            # unit tests only
 pytest tests/integration/     # full pipeline tests
 pytest -m "not slow"          # skip tests that download HuggingFace models
@@ -439,7 +491,7 @@ src/mlnode/
 ├── model.py             # MLnodeModel — top-level API
 ├── errors.py            # Error hierarchy
 ├── schema/
-│   ├── models.py        # Pydantic models (GraphSchema, NodeSchema, EdgeSchema, BlockDefinition)
+│   ├── models.py        # Pydantic models (GraphSchema, NodeSchema, EdgeSchema, BlockDefinition, LayerDefinition)
 │   └── types.py         # Dim, Shape, ValidationResult, constants
 ├── parser/
 │   └── dag.py           # DAGParser → ParsedGraph (topo sort, cycle detection)
@@ -449,7 +501,8 @@ src/mlnode/
 │   └── builder.py       # ModuleBuilder → MLnodeModule(nn.Module)
 ├── layers/
 │   ├── registry.py      # Maps type strings to nn.Module constructors
-│   └── custom.py        # Custom layer validation (spec §4, steps 1-5)
+│   ├── custom.py        # Python custom layer validation (spec §4, steps 1-5)
+│   └── json_layers.py   # JSON custom layers: LayerRegistry, params, $-references
 ├── blocks/
 │   ├── registry.py      # BlockRegistry for reusable block definitions
 │   └── expansion.py     # Flattens Block nodes into parent graph

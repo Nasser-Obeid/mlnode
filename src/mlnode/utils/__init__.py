@@ -15,21 +15,24 @@ def resolve_multi_inputs(
     node_type: str,
     edge_ports: list[str | None],
     values: list[T],
+    ports: tuple[str, ...] | None = None,
 ) -> list[T]:
     """Order incoming values for a multi-positional-input layer.
 
     ``values`` are the incoming tensors (or shapes) in edge declaration order;
     ``edge_ports`` are the matching ``target_port`` labels (None if unlabeled).
 
-    Labeled edges are mapped onto the layer's port list from
-    MULTI_INPUT_LAYERS (e.g. ("tgt", "memory") for TransformerDecoder).
+    Labeled edges are mapped onto the layer's port list — ``ports`` if given
+    (JSON custom layers pass their Input node ids), else MULTI_INPUT_LAYERS
+    (e.g. ("tgt", "memory") for TransformerDecoder).
     Unlabeled edges are assigned to the ports in declaration order.
 
     MultiheadAttention allows fewer inputs than ports:
     1 input → query=key=value, 2 inputs → query, key=value.
     All other multi-input layers require exactly one value per port.
     """
-    ports = MULTI_INPUT_LAYERS[node_type]
+    if ports is None:
+        ports = MULTI_INPUT_LAYERS[node_type]
     by_port: dict[str, T] = {}
 
     labeled = [p for p in edge_ports if p is not None]

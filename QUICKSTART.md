@@ -5,8 +5,10 @@ From zero to a trained PyTorch model in about five minutes. Every snippet here i
 ## 1. Install
 
 ```bash
-pip install mlnode              # requires Python ≥ 3.11
+pip install mlnode              # Python 3.11–3.15, Linux or Windows
 ```
+
+On Python 3.15, install PyTorch from its own index first (PyPI has no 3.15 torch wheels yet): `pip install torch --index-url https://download.pytorch.org/whl/cpu`.
 
 Or, for a development setup:
 
@@ -14,6 +16,13 @@ Or, for a development setup:
 git clone https://github.com/Nasser-Obeid/MLnode.git && cd MLnode
 ./setup.sh                      # checks Python ≥ 3.11, creates .venv, installs everything
 source .venv/bin/activate
+```
+
+On Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+.\.venv\Scripts\Activate.ps1
 ```
 
 Verify:
@@ -102,4 +111,4 @@ The same `.mlnode.json` files can be drawn visually in [mlnode-editor](https://g
 - Real training runs on MNIST (CNN, Transformer, GAN): [`examples/notebooks/`](examples/notebooks/)
 - Skip connections, `Split`/`Concat`, multiple inputs: [docs/getting-started.md](docs/getting-started.md)
 - The full JSON format: [docs/json-schema.md](docs/json-schema.md)
-- Reusable sub-graphs, custom layers, HuggingFace nodes: [docs/](docs/README.md)
+- Reusable sub-graphs, custom layers in JSON or Python, HuggingFace nodes: [docs/](docs/README.md)

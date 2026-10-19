@@ -41,18 +41,25 @@ class MLnodeModel:
         self._original_data = original_data
 
     @classmethod
-    def load(cls, path: str | Path, block_registry: Any = None) -> MLnodeModel:
-        """Load a MLnode model from a .mlnode.json file."""
+    def load(
+        cls, path: str | Path, block_registry: Any = None, layer_registry: Any = None
+    ) -> MLnodeModel:
+        """Load a MLnode model from a .mlnode.json file.
+
+        Files are read as UTF-8 on every platform (not the Windows locale code page).
+        """
         path = Path(path)
-        with path.open() as f:
+        with path.open(encoding="utf-8") as f:
             data = json.load(f)
-        graph = DAGParser.parse_dict(data, block_registry)
+        graph = DAGParser.parse_dict(data, block_registry, layer_registry)
         return cls(graph, original_data=data)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], block_registry: Any = None) -> MLnodeModel:
+    def from_dict(
+        cls, data: dict[str, Any], block_registry: Any = None, layer_registry: Any = None
+    ) -> MLnodeModel:
         """Create a MLnode model from a dictionary."""
-        graph = DAGParser.parse_dict(data, block_registry)
+        graph = DAGParser.parse_dict(data, block_registry, layer_registry)
         return cls(graph, original_data=data)
 
     @property
@@ -103,8 +110,9 @@ class MLnodeModel:
             data = self._graph.schema.model_dump(mode="json")
         else:
             data = self._original_data
-        with path.open("w") as f:
-            json.dump(data, f, indent=2)
+        with path.open("w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
 
     def __repr__(self) -> str:
         name = self._graph.schema.metadata.name or "unnamed"

@@ -14,7 +14,9 @@ from mlnode.parser.dag import ParsedGraph, ParsedNode
 from mlnode.schema.types import (
     ELEMENTWISE_OPS,
     MULTI_INPUT_LAYERS,
+    REDUCTION_OPS,
     Dim,
+    ReductionType,
     Shape,
     ShapeError,
     ValidationResult,
@@ -537,6 +539,8 @@ def _elementwise_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
 def _stack_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
     dim = params.get("dim", 0)
     ref = list(inputs[0])
+    if dim < 0:
+        dim = len(ref) + 1 + dim  # torch.stack(dim=-1) appends a new last dim
     ref.insert(dim, len(inputs))
     return tuple(ref)
 
@@ -684,8 +688,17 @@ def _split_shape(inputs: list[Shape], params: dict[str, Any]) -> Shape:
 class ShapeValidator:
     """Validates tensor shapes through the DAG statically (spec §3)."""
 
-    def __init__(self, graph: ParsedGraph) -> None:
+    def __init__(self, graph: ParsedGraph, input_shapes: list[Shape] | None = None) -> None:
+        """
+        Args:
+            graph: The parsed graph to validate.
+            input_shapes: One shape per Input node, in declaration order.
+                Defaults to the schema's input_shape for every Input node.
+                Used for JSON custom layer sub-graphs, whose inputs come
+                from the parent graph.
+        """
         self.graph = graph
+        self.input_shapes = input_shapes
 
     def validate(self) -> ValidationResult:
         """Run shape propagation and return all errors."""
@@ -694,9 +707,10 @@ class ShapeValidator:
         input_shape = tuple(self.graph.schema.input_shape)
 
         # Seed input nodes
-        for input_node in self.graph.input_nodes:
-            store[input_node.id] = input_shape
-            result.node_shapes[input_node.id] = input_shape
+        for i, input_node in enumerate(self.graph.input_nodes):
+            shape = tuple(self.input_shapes[i]) if self.input_shapes is not None else input_shape
+            store[input_node.id] = shape
+            result.node_shapes[input_node.id] = shape
 
         # Walk execution order
         for node_id in self.graph.execution_order:
@@ -708,6 +722,29 @@ class ShapeValidator:
             # Gather input shapes
             input_shapes = self._gather_inputs(node, store, result)
             if input_shapes is None:
+                continue
+
+            if node_id in self.graph.custom_layers:
+                self._validate_json_layer(node, input_shapes, store, result)
+                continue
+
+            # Single-input layers fed by several edges: apply the node's
+            # fallback reduction (§1.2) exactly as the executor does.
+            if (
+                len(input_shapes) > 1
+                and node.type not in REDUCTION_OPS
+                and node.type not in MULTI_INPUT_LAYERS
+            ):
+                try:
+                    input_shapes = [_reduce_shapes(node, input_shapes)]
+                except MLnodeError as e:
+                    result.add_error(ShapeError(node_id=node_id, message=str(e)))
+                    continue
+
+            # Layers that fix their input width (in_features, in_channels, …)
+            mismatch = _check_input_features(node, input_shapes)
+            if mismatch is not None:
+                result.add_error(mismatch)
                 continue
 
             # Validate elementwise ops require identical shapes
@@ -785,6 +822,45 @@ class ShapeValidator:
 
         return shapes
 
+    def _validate_json_layer(
+        self, node: ParsedNode, input_shapes: list[Shape],
+        store: dict[str, Shape], result: ValidationResult,
+    ) -> None:
+        """Validate a JSON custom layer by recursing into its sub-graph.
+
+        Inner shapes and errors are reported under namespaced IDs
+        ({node_id}/{inner_id}), like expanded blocks.
+        """
+        sub_graph = self.graph.custom_layers[node.id]
+        ports = tuple(n.id for n in sub_graph.input_nodes)
+        edge_ports = [e.target_port for e in node.incoming_edges]
+        try:
+            args = _bind_json_layer_inputs(node, ports, edge_ports, input_shapes)
+        except MLnodeError as e:
+            result.add_error(ShapeError(node_id=node.id, message=str(e)))
+            return
+
+        sub_result = ShapeValidator(sub_graph, input_shapes=args).validate()
+        prefix = f"{node.id}/"
+        for inner_id, shape in sub_result.node_shapes.items():
+            result.node_shapes[prefix + inner_id] = shape
+        for err in sub_result.errors:
+            result.add_error(ShapeError(
+                node_id=prefix + err.node_id,
+                message=f"In custom layer '{node.id}' ({node.schema.layer}): {err.message}",
+                expected_shape=err.expected_shape,
+                actual_shape=err.actual_shape,
+                source_node_id=prefix + err.source_node_id if err.source_node_id else None,
+            ))
+
+        out_shape = sub_result.node_shapes.get(sub_graph.schema.output_node)
+        if not sub_result.valid or out_shape is None:
+            return
+        store[node.id] = out_shape
+        result.node_shapes[node.id] = out_shape
+        if node.schema.outputs:
+            self._store_port_shapes(node, out_shape, store, result)
+
     def _store_port_shapes(
         self, node: ParsedNode, out_shape: Shape,
         store: dict[str, Shape], result: ValidationResult,
@@ -807,3 +883,140 @@ class ShapeValidator:
                 port_key = f"{node.id}:{port_name}"
                 store[port_key] = out_shape
                 result.node_shapes[port_key] = out_shape
+
+
+def _bind_json_layer_inputs(
+    node: ParsedNode,
+    ports: tuple[str, ...],
+    edge_ports: list[str | None],
+    values: list[Any],
+) -> list[Any]:
+    """Map a JSON custom layer node's incoming shapes onto its input ports.
+
+    Multi-input layers bind by target_port (= the layer's Input node ids) or
+    declaration order. Single-input layers accept several inputs only through
+    the node's 'reduction' fallback, as core layers do.
+    """
+    if len(ports) > 1:
+        return resolve_multi_inputs(node.id, node.type, edge_ports, values, ports=ports)
+
+    bad = sorted({p for p in edge_ports if p is not None and p != ports[0]})
+    if bad:
+        raise MLnodeError(
+            f"Node '{node.id}' (custom layer '{node.schema.layer}'): unknown "
+            f"target_port {bad}. Valid ports: {ports[0]}."
+        )
+    if not values:
+        raise MLnodeError(
+            f"Node '{node.id}' (custom layer '{node.schema.layer}') has no inputs."
+        )
+    if len(values) == 1:
+        return values
+    return [_reduce_shapes(node, values)]
+
+
+def _reduce_shapes(node: ParsedNode, values: list[Shape]) -> Shape:
+    """Combine several input shapes with the node's fallback 'reduction' (§1.2)."""
+    reduction = node.schema.reduction
+    if reduction is None:
+        what = (
+            f"custom layer '{node.schema.layer}' has one input port and"
+            if node.schema.layer
+            else f"'{node.type}' takes one input and"
+        )
+        raise MLnodeError(
+            f"Node '{node.id}' received {len(values)} inputs but {what} the node "
+            f"has no reduction strategy. Set 'reduction' (concat, add or stack)."
+        )
+    dim = node.schema.reduction_dim if node.schema.reduction_dim is not None else -1
+    if reduction == ReductionType.ADD:
+        if any(v != values[0] for v in values[1:]):
+            raise MLnodeError(
+                f"Node '{node.id}': reduction 'add' needs identical input shapes, "
+                f"got {values}."
+            )
+        return values[0]
+    if reduction == ReductionType.CONCAT:
+        return _concat_shape(values, {"dim": dim})
+    return _stack_shape(values, {"dim": dim})
+
+
+# Layers whose constructor fixes the size of one input dimension; a mismatch is
+# a hard error in PyTorch at runtime. type → (param, input dim index).
+_INPUT_FEATURE_PARAMS: dict[str, tuple[str, int]] = {
+    "Linear": ("in_features", -1),
+    **{t: ("in_channels", 1) for t in (
+        "Conv1d", "Conv2d", "Conv3d",
+        "ConvTranspose1d", "ConvTranspose2d", "ConvTranspose3d",
+    )},
+    **{t: ("num_features", 1) for t in (
+        "BatchNorm1d", "BatchNorm2d", "BatchNorm3d", "SyncBatchNorm",
+    )},
+    "GroupNorm": ("num_channels", 1),
+    **{t: ("input_size", -1) for t in (
+        "RNN", "LSTM", "GRU", "RNNCell", "LSTMCell", "GRUCell",
+    )},
+}
+
+
+def _check_input_features(node: ParsedNode, input_shapes: list[Shape]) -> ShapeError | None:
+    """Check a layer's declared input width against its (single) input shape.
+
+    Only concrete dims are compared; symbolic dims and missing params pass.
+    Error format follows spec §3: "Node 'x' expects (…), got (…) from 'y'".
+    """
+    if len(input_shapes) != 1:
+        return None
+    shape = input_shapes[0]
+    params = node.schema.params
+
+    if node.type in ("LayerNorm", "RMSNorm"):
+        normalized = params.get("normalized_shape")
+        if normalized is None:
+            return None
+        expected_tail = (
+            tuple(normalized) if isinstance(normalized, (list, tuple)) else (normalized,)
+        )
+        if not expected_tail or len(expected_tail) > len(shape):
+            return None
+        index = len(shape) - len(expected_tail)
+        actual_tail = shape[index:]
+        if all(
+            not isinstance(a, int) or a == e
+            for a, e in zip(actual_tail, expected_tail, strict=True)
+        ):
+            return None
+        expected = (*shape[:index], *expected_tail)
+        reason = f"normalized_shape={list(expected_tail)}"
+    else:
+        spec = _INPUT_FEATURE_PARAMS.get(node.type)
+        if spec is None:
+            return None
+        param, index = spec
+        want = params.get(param)
+        if not isinstance(want, int) or not shape or abs(index) > len(shape):
+            return None
+        got = shape[index]
+        if not isinstance(got, int) or got == want:
+            return None
+        expected_list = list(shape)
+        expected_list[index] = want
+        expected = tuple(expected_list)
+        reason = f"{param}={want}"
+
+    source = node.incoming_edges[0].source if len(node.incoming_edges) == 1 else None
+    from_part = f" from '{source}'" if source else ""
+    return ShapeError(
+        node_id=node.id,
+        message=(
+            f"Node '{node.id}' ({node.type}, {reason}) expects {_fmt(expected)}, "
+            f"got {_fmt(shape)}{from_part}"
+        ),
+        expected_shape=expected,
+        actual_shape=shape,
+        source_node_id=source,
+    )
+
+
+def _fmt(shape: Shape) -> str:
+    return "(" + ", ".join(str(d) for d in shape) + ")"

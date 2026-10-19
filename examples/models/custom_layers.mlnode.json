@@ -1,0 +1,86 @@
+{
+  "mlnode_schema_version": "1.1",
+  "metadata": {
+    "name": "Small ResNet with JSON custom layers",
+    "description": "CIFAR-sized classifier built from two JSON-defined layers: ConvBNAct, and ResidualConv which nests ConvBNAct"
+  },
+  "input_shape": ["B", 3, 32, 32],
+  "output_node": "head",
+  "custom_layers": {
+    "ConvBNAct": {
+      "description": "Conv2d → BatchNorm2d → ReLU with 'same' padding for odd kernels",
+      "params": {
+        "in_channels": {"type": "int"},
+        "out_channels": {"type": "int"},
+        "kernel_size": {"type": "int", "default": 3},
+        "stride": {"type": "int", "default": 1}
+      },
+      "nodes": [
+        {"id": "x", "type": "Input"},
+        {"id": "conv", "type": "Conv2d", "params": {
+          "in_channels": "$in_channels",
+          "out_channels": "$out_channels",
+          "kernel_size": "$kernel_size",
+          "stride": "$stride",
+          "padding": "${kernel_size // 2}",
+          "bias": false
+        }},
+        {"id": "bn", "type": "BatchNorm2d", "params": {"num_features": "$out_channels"}},
+        {"id": "act", "type": "ReLU"}
+      ],
+      "edges": [
+        {"source": "x", "target": "conv"},
+        {"source": "conv", "target": "bn"},
+        {"source": "bn", "target": "act"}
+      ],
+      "output_node": "act"
+    },
+    "ResidualConv": {
+      "description": "Basic residual block: ConvBNAct → Conv2d → BatchNorm2d, plus identity skip, then ReLU",
+      "params": {
+        "channels": {"type": "int"}
+      },
+      "nodes": [
+        {"id": "x", "type": "Input"},
+        {"id": "conv1", "type": "custom", "layer": "ConvBNAct", "params": {
+          "in_channels": "$channels", "out_channels": "$channels"
+        }},
+        {"id": "conv2", "type": "Conv2d", "params": {
+          "in_channels": "$channels", "out_channels": "$channels",
+          "kernel_size": 3, "padding": 1, "bias": false
+        }},
+        {"id": "bn2", "type": "BatchNorm2d", "params": {"num_features": "$channels"}},
+        {"id": "skip", "type": "Add"},
+        {"id": "out", "type": "ReLU"}
+      ],
+      "edges": [
+        {"source": "x", "target": "conv1"},
+        {"source": "conv1", "target": "conv2"},
+        {"source": "conv2", "target": "bn2"},
+        {"source": "x", "target": "skip"},
+        {"source": "bn2", "target": "skip"},
+        {"source": "skip", "target": "out"}
+      ],
+      "output_node": "out"
+    }
+  },
+  "nodes": [
+    {"id": "input", "type": "Input"},
+    {"id": "stem", "type": "custom", "layer": "ConvBNAct", "params": {"in_channels": 3, "out_channels": 32}},
+    {"id": "res1", "type": "custom", "layer": "ResidualConv", "params": {"channels": 32}},
+    {"id": "down", "type": "custom", "layer": "ConvBNAct", "params": {"in_channels": 32, "out_channels": 64, "stride": 2}},
+    {"id": "res2", "type": "custom", "layer": "ResidualConv", "params": {"channels": 64}},
+    {"id": "pool", "type": "AdaptiveAvgPool2d", "params": {"output_size": 1}},
+    {"id": "flatten", "type": "Flatten", "params": {"start_dim": 1}},
+    {"id": "head", "type": "Linear", "params": {"in_features": 64, "out_features": 10}}
+  ],
+  "edges": [
+    {"source": "input", "target": "stem"},
+    {"source": "stem", "target": "res1"},
+    {"source": "res1", "target": "down"},
+    {"source": "down", "target": "res2"},
+    {"source": "res2", "target": "pool"},
+    {"source": "pool", "target": "flatten"},
+    {"source": "flatten", "target": "head"}
+  ]
+}

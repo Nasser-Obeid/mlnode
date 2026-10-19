@@ -254,8 +254,11 @@ def _build_custom_layer(node: NodeSchema, input_shape: Shape | None = None) -> n
     """
     path = node.path
     if path is None:
+        # JSON layers ('layer' field) are resolved by the parser and built by
+        # the executor as nested modules; they never reach build_layer().
         raise CustomLayerError(
-            f"Node '{node.id}': custom type requires 'path' field.",
+            f"Node '{node.id}': custom type requires 'path' field. JSON layers "
+            f"('layer') are built from a parsed graph, not by build_layer().",
             node_id=node.id,
         )
 

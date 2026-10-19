@@ -1,6 +1,6 @@
 # JSON Schema Reference
 
-Complete reference for the `.mlnode.json` format (schema version `1.0`). The schema is enforced by the Pydantic models in `src/mlnode/schema/models.py`; structural DAG rules are enforced by the parser in `src/mlnode/parser/dag.py`.
+Complete reference for the `.mlnode.json` format (schema versions `1.0` and `1.1`; `1.1` adds JSON custom layers). The schema is enforced by the Pydantic models in `src/mlnode/schema/models.py`; structural DAG rules are enforced by the parser in `src/mlnode/parser/dag.py`.
 
 ## Top-Level Structure
 
@@ -11,18 +11,20 @@ Complete reference for the `.mlnode.json` format (schema version `1.0`). The sch
   "input_shape": ["B", 3, 224, 224],
   "output_node": "classifier",
   "nodes": [...],
-  "edges": [...]
+  "edges": [...],
+  "custom_layers": {...}
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `mlnode_schema_version` | yes | Must be `"1.0"`. Anything else raises `SchemaVersionError`. |
+| `mlnode_schema_version` | yes | `"1.0"` or `"1.1"`. Anything else raises `SchemaVersionError`. Use `"1.1"` when the file declares `custom_layers`. |
 | `metadata` | no | `name`, `description`, `author` — all optional strings. |
 | `input_shape` | yes | Shape fed to **each** `Input` node. Mix of symbolic strings and integers. |
 | `output_node` | yes | ID of the node whose output is the model's return value. Must exist in `nodes`. |
 | `nodes` | yes | List of node objects (below). At least one must have `type: "Input"`. |
 | `edges` | yes | List of edge objects (below). |
+| `custom_layers` | no | *(1.1)* Map of layer name → JSON layer definition, used by `custom` nodes via `layer`. Requires schema `"1.1"`. See [custom-layers.md](custom-layers.md#json-layers). |
 
 ## Node Schema
 
@@ -39,6 +41,7 @@ Complete reference for the `.mlnode.json` format (schema version `1.0`). The sch
   "hf_model": "bert-base-uncased",
   "hf_config": "GPT2Config",
   "path": "user.layers.MyLayer",
+  "layer": "ConvBNAct",
   "block": { ... },
   "block_ref": "resnet_block"
 }
@@ -51,13 +54,14 @@ Only `id`, `type`, and `params` are required; everything else is optional.
 | `id` | all | Unique, non-empty string. Duplicates are rejected. |
 | `type` | all | A core layer type, `"Block"`, or `"custom"`. Nodes with `hf_model`/`hf_config` set may use any type string. |
 | `params` | all | Keyword arguments passed to the layer constructor (e.g. `nn.Conv2d(**params)`). |
-| `shared_id` | any layer | Nodes with the same `shared_id` share one `nn.Module` instance (weight sharing). They must have **identical `type` and `params`**. |
+| `shared_id` | any layer | Nodes with the same `shared_id` share one `nn.Module` instance (weight sharing). They must have **identical `type` and `params`** (and `path`/`layer` for custom nodes). |
 | `outputs` | multi-output nodes (`Split`) | Named output ports, referenced by edges via `source_port`. |
 | `reduction` | non-reduction-op nodes | Fallback for nodes receiving >1 input: `"concat"`, `"add"`, or `"stack"`. **Forbidden** on reduction ops (`Add`, `Concat`, …), which reduce implicitly. |
 | `reduction_dim` | with `reduction` | Dimension for `concat`/`stack` (default `-1`). |
 | `hf_model` | HuggingFace nodes | Model ID for `AutoModel.from_pretrained()`. Top-level field, **not** inside `params`. |
 | `hf_config` | HuggingFace nodes | Config name for random-init construction (no weight download). Top-level field. |
-| `path` | `type: "custom"` | Import path `"pkg.module.ClassName"`. Required for custom nodes. The class must subclass `nn.Module`. |
+| `path` | `type: "custom"` | Import path `"pkg.module.ClassName"` of a Python `nn.Module` subclass. A custom node needs `path` **or** `layer`. |
+| `layer` | `type: "custom"` | *(1.1)* Name of a JSON layer from `custom_layers` or a `LayerRegistry`; `params` are the layer's declared params. See [custom-layers.md](custom-layers.md#json-layers). |
 | `block` | `type: "Block"` | Inline sub-graph definition (see below). |
 | `block_ref` | `type: "Block"` | Name of a block registered in a `BlockRegistry`. A Block node needs `block` **or** `block_ref`. |
 
@@ -138,13 +142,39 @@ A `Block` node embeds (or references) a reusable single-input/single-output sub-
 
 Blocks are expanded (flattened) at parse time; internal IDs become `res1/<internal_id>`. See [blocks.md](blocks.md) for the full expansion semantics, nesting, and the registry.
 
+## Custom Layers in JSON (1.1)
+
+A JSON layer is a named, parameterized sub-graph declared under `custom_layers` and used through `custom` nodes:
+
+```json
+"custom_layers": {
+  "MLP": {
+    "params": {"dim": {"type": "int"}, "expansion": {"type": "int", "default": 4}},
+    "nodes": [
+      {"id": "x",   "type": "Input"},
+      {"id": "fc1", "type": "Linear", "params": {"in_features": "$dim", "out_features": "${dim * expansion}"}},
+      {"id": "act", "type": "ReLU"},
+      {"id": "fc2", "type": "Linear", "params": {"in_features": "${dim * expansion}", "out_features": "$dim"}}
+    ],
+    "edges": [{"source": "x", "target": "fc1"}, {"source": "fc1", "target": "act"}, {"source": "act", "target": "fc2"}],
+    "output_node": "fc2"
+  }
+}
+```
+
+```json
+{"id": "ffn", "type": "custom", "layer": "MLP", "params": {"dim": 256}}
+```
+
+Unlike Blocks, layers are not flattened: each use builds a nested `nn.Module`. Full reference — param types, `$`/`${…}` references, multi-input ports, `LayerRegistry`: [custom-layers.md](custom-layers.md#json-layers).
+
 ## Validation Order
 
 A graph passes through these gates, in order:
 
-1. **Pydantic schema validation** — field types, version check, `output_node` existence, at least one `Input`, unique IDs, edge endpoints exist, weight-sharing groups consistent, per-node type rules (`custom` needs `path`, `Block` needs `block`/`block_ref`, no `reduction` on reduction ops).
+1. **Pydantic schema validation** — field types, version check, `output_node` existence, at least one `Input`, unique IDs, edge endpoints exist, weight-sharing groups consistent, per-node type rules (`custom` needs `path` or `layer`, `Block` needs `block`/`block_ref`, no `reduction` on reduction ops), `custom_layers` only with schema `1.1`.
 2. **Block expansion** — `Block` nodes flattened (recursively, max depth 10).
-3. **DAG construction** — self-loop and cycle detection, topological sort, `output_node` reachable from at least one `Input`, `source_port` references declared.
+3. **DAG construction** — self-loop and cycle detection, topological sort, `output_node` reachable from at least one `Input`, `source_port` references declared. JSON layer nodes are resolved, their params bound and type-checked, and their sub-graphs parsed through these same steps (recursively, max depth 10).
 4. **Shape validation** (`model.validate()`) — static shape propagation; see [validation.md](validation.md).
 
 Steps 1–3 run eagerly in `MLnodeModel.load()` / `from_dict()` and raise on failure. Step 4 collects all errors into a `ValidationResult`.

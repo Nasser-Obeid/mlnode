@@ -313,3 +313,28 @@ class TestTensorOpShapes:
         assert r.valid
         assert r.node_shapes["split:big"] == ("B", 60)
         assert r.node_shapes["split:small"] == ("B", 40)
+
+
+class TestStackShape:
+    @pytest.mark.parametrize("dim", [0, 1, 2, -1, -2, -3])
+    def test_matches_torch(self, dim: int) -> None:
+        import torch
+
+        data = {
+            "mlnode_schema_version": "1.0",
+            "input_shape": [2, 5],
+            "output_node": "stack",
+            "nodes": [
+                {"id": "input", "type": "Input", "params": {}},
+                {"id": "stack", "type": "Stack", "params": {"dim": dim}},
+            ],
+            "edges": [
+                {"source": "input", "target": "stack"},
+                {"source": "input", "target": "stack"},
+                {"source": "input", "target": "stack"},
+            ],
+        }
+        r = _validate(data)
+        assert r.valid
+        x = torch.zeros(2, 5)
+        assert r.node_shapes["stack"] == tuple(torch.stack([x, x, x], dim=dim).shape)
