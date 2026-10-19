@@ -8,6 +8,9 @@
 2. Nodes are visited in topological order. For each node the validator:
    - gathers its input shapes from the incoming edges (respecting `source_port` for multi-output sources);
    - for multi-input layers (`Transformer`, `MultiheadAttention`, …), reorders the shapes by `target_port` using the same `resolve_multi_inputs()` logic the executor uses — so static shapes match runtime semantics;
+   - for single-input layers fed by several edges, applies the node's fallback `reduction` (`concat`/`add`/`stack`) to the shapes, exactly as the executor combines the tensors — or reports an error if no `reduction` is set;
+   - checks the layer's declared input width (`in_features`, `in_channels`, …) against the incoming shape (see below);
+   - for JSON custom layers, validates the layer's sub-graph with the incoming shapes;
    - for elementwise ops (`Add`, `Subtract`, `Multiply`, `Divide`), checks all input shapes are identical;
    - looks up the node type's **shape transform rule** and computes the output shape.
 3. Errors are **collected, not raised** — a failed node simply doesn't produce a shape, and downstream nodes that depend on it report a missing input. You fix everything in one pass.
@@ -32,15 +35,29 @@ Shapes are tuples of `int | str`. Recognized symbols: `B`, `Seq`, `C`, `H`, `W`,
 
 ## Consistency Checks
 
-Beyond pure propagation, some rules verify params against incoming shapes:
+Beyond pure propagation, the validator verifies params against incoming shapes. Each check covers a mismatch that PyTorch would reject at runtime, so it only moves the failure earlier; symbolic dims always pass.
 
 | Rule | Check |
 |------|-------|
+| `Linear` | last dim == `in_features` |
+| `Conv1d/2d/3d`, `ConvTranspose1d/2d/3d` | channel dim (index 1) == `in_channels` |
+| `BatchNorm1d/2d/3d`, `SyncBatchNorm` | channel dim == `num_features` |
+| `GroupNorm` | channel dim == `num_channels` |
+| `LayerNorm`, `RMSNorm` | trailing dims == `normalized_shape` |
+| `RNN`, `LSTM`, `GRU`, `RNNCell`, `LSTMCell`, `GRUCell` | last dim == `input_size` |
 | `MultiheadAttention` | query's last dim == `embed_dim` |
 | `Transformer`, `TransformerEncoder(-Layer)`, `TransformerDecoder(-Layer)` | each input's last dim == `d_model` |
 | `Bilinear` | last dims == `in1_features` / `in2_features` |
 | Elementwise ops | all input shapes identical |
 | Weight sharing | all nodes in a `shared_id` group must have identical type/params (schema-level) |
+
+Input-width errors use the spec §3 format and carry `expected_shape`, `actual_shape` and `source_node_id`:
+
+```
+Node 'fc' (Linear, in_features=512) expects (B, 512), got (B, 256) from 'flatten'
+```
+
+`InstanceNorm*` is deliberately not checked: with its defaults (`affine=False`), PyTorch only warns on a `num_features` mismatch.
 
 Decoder output follows `tgt`; `Transformer` output follows `tgt`; `MultiheadAttention` output follows `query`.
 
@@ -61,8 +78,8 @@ A pending rule surfaces as a `Node 'x': shape computation failed: …` error. Si
 
 ## Known Limitations
 
-- **Fallback `reduction` is not simulated.** For a non-reduction-op node with multiple inputs and a `reduction` field, the shape rule receives the raw input list and typically uses only the first shape. A `Linear` fed by two concatenated inputs may validate against the wrong width; runtime is authoritative there.
-- **Custom layers are passthrough by default.** The validator has no rule for `type: "custom"`, so a single-input custom node is assumed shape-preserving. To validate real shapes, either call `mlnode.layers.custom.validate_custom_layer()` (dummy-forward probe — see [custom-layers.md](custom-layers.md)) or register a rule:
+- **JSON custom layers are fully validated** — the validator runs the layer's sub-graph with the incoming shapes and reports inner errors as `<node>/<inner node>`. The limitation below applies to Python-class layers (`path`) only.
+- **Python custom layers are passthrough by default.** The validator has no rule for `type: "custom"`, so a single-input custom node is assumed shape-preserving. To validate real shapes, either call `mlnode.layers.custom.validate_custom_layer()` (dummy-forward probe — see [custom-layers.md](custom-layers.md)) or register a rule:
 
   ```python
   from mlnode.validator.shapes import register_custom_shape

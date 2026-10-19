@@ -28,18 +28,31 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
 
 # torch >= 2.4 is required for nn.RMSNorm (registered in layers/registry.py).
+# Newer Pythons need the first releases that ship wheels for them on both
+# Linux and Windows: torch 2.9 / pydantic 2.12 (3.14), torch 2.14 / pydantic 2.14 (3.15).
+# Note: torch 3.15 wheels are published on download.pytorch.org, not PyPI — see README.
 dependencies = [
-    "torch>=2.4",
+    "torch>=2.4; python_version < '3.14'",
+    "torch>=2.9; python_version == '3.14'",
+    "torch>=2.14; python_version >= '3.15'",
     "networkx>=3.0",
-    "pydantic>=2.0",
+    "pydantic>=2.0; python_version < '3.14'",
+    "pydantic>=2.12; python_version == '3.14'",
+    "pydantic>=2.14; python_version >= '3.15'",
 ]
 
 [project.optional-dependencies]
@@ -90,7 +103,11 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF", "PLW1514"]
+# PLW1514 (open() without encoding=) is a preview rule; enable only rules named
+# explicitly. It guards Windows, where the default encoding is not UTF-8 before 3.15.
+preview = true
+explicit-preview-rules = true
 
 [tool.mypy]
 python_version = "3.11"

@@ -5,6 +5,72 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-19
+
+### Added
+
+- **JSON custom layers (schema `1.1`).** Define a layer as a named,
+  parameterized sub-graph under a top-level `custom_layers` map and use it with
+  `{"type": "custom", "layer": "<name>", "params": {...}}`. See
+  `docs/custom-layers.md` and `examples/models/custom_layers.mlnode.json`.
+  - Declared params with types (`int`, `float`, `bool`, `str`, `list`, `dict`,
+    `any`) and defaults; missing, unknown and mistyped params raise
+    `CustomLayerError` at load time.
+  - `"$name"` param references and `"${expr}"` arithmetic (`+ - * / // % **`,
+    `min`/`max`/`abs`/`int`/`float`/`round`), evaluated by an AST whitelist —
+    no `eval()`.
+  - Multi-input layers: the definition's `Input` nodes are its ports, bound by
+    `target_port` or declaration order.
+  - Each use builds a nested `nn.Module`; `validate()` checks shapes through
+    the sub-graph and reports inner errors as `<node>/<inner node>`.
+  - Layers can nest other layers and Blocks (depth ≤ 10), share weights via
+    `shared_id`, and work inside Blocks.
+  - `LayerRegistry` (`register`, `register_from_dict`, `register_from_file`,
+    `register_library`) plus a process-wide default registry;
+    `MLnodeModel.load`/`from_dict` accept `layer_registry=`.
+- **Python 3.14 and 3.15 support**, verified on 3.15.0 (all tests pass with
+  `DeprecationWarning` as error). Dependency floors rise on new interpreters to
+  the first releases with wheels for them: torch ≥ 2.9 / pydantic ≥ 2.12 on
+  3.14, torch ≥ 2.14 / pydantic ≥ 2.14 on 3.15. PyPI has no torch 3.15 wheels
+  yet; install from `https://download.pytorch.org/whl/<cpu|cuXXX>` (the setup
+  scripts do this automatically).
+- **Windows support:** `setup.ps1` (PowerShell counterpart of `setup.sh`);
+  `setup.sh` also works under Git Bash. GitHub Actions CI runs the test suite
+  on Ubuntu and Windows × Python 3.11–3.15, plus both setup scripts.
+- `.gitattributes` pinning LF for `.sh`/`.json` and CRLF for `.ps1`.
+- **Input-width checks in `validate()`**: `Linear` (`in_features`), convolutions
+  (`in_channels`), `BatchNorm*`/`SyncBatchNorm` (`num_features`), `GroupNorm`
+  (`num_channels`), `LayerNorm`/`RMSNorm` (`normalized_shape`) and the
+  recurrent layers (`input_size`) are checked against the incoming shape.
+  Errors follow the spec §3 format — `Node 'fc' (Linear, in_features=512)
+  expects (B, 512), got (B, 256) from 'flatten'` — and set `expected_shape`,
+  `actual_shape` and `source_node_id`. Every case is a hard runtime error in
+  PyTorch, so no previously working model is rejected; symbolic dims pass.
+- **Fallback `reduction` is now simulated** by the validator for every
+  single-input layer fed by several edges (previously the rule saw only the
+  first input). A node with several inputs and no `reduction` now fails
+  validation, as spec §1.2 requires, instead of failing at runtime.
+- mlnode-editor 1.1.0 supports JSON custom layers (separate repository).
+
+### Changed
+
+- Schema version `1.1` is now accepted alongside `1.0`; files declaring
+  `custom_layers` must use `1.1`.
+- `custom` nodes take `path` **or** `layer` (exactly one).
+- Weight-sharing groups also require identical `path`/`layer`.
+- All JSON files are read and written as UTF-8 regardless of platform locale
+  (previously Windows used the ANSI code page, so non-ASCII metadata failed to
+  load). `save()` now writes LF line endings, non-ASCII characters unescaped,
+  and a trailing newline.
+- `resolve_multi_inputs()` takes an optional `ports=` override;
+  `ShapeValidator` takes optional per-Input `input_shapes=`.
+- Ruff enforces `PLW1514` (`open()` without `encoding=`).
+
+### Fixed
+
+- `Stack` shape rule placed the new dimension one position too early for
+  negative `dim` (e.g. `dim=-1`).
+
 ## [1.0.1] — 2026-08-02
 
 Documentation and packaging metadata only — no library code changed.

@@ -13,10 +13,16 @@ For development, clone the repo and install editable — or use the bundled scri
 
 ```bash
 git clone https://github.com/Nasser-Obeid/MLnode.git && cd MLnode
-pip install -e ".[dev]"       # or: ./setup.sh
+pip install -e ".[dev]"       # or: ./setup.sh  (Windows: .\setup.ps1)
 ```
 
-Requirements: Python ≥ 3.11, PyTorch ≥ 2.4, NetworkX ≥ 3.0, Pydantic ≥ 2.0 (Transformers ≥ 4.30 only with the `[hf]` extra).
+Requirements: Python 3.11–3.15 on Linux or Windows, PyTorch ≥ 2.4, NetworkX ≥ 3.0, Pydantic ≥ 2.0 (Transformers ≥ 4.30 only with the `[hf]` extra). Python 3.14+ needs newer floors (torch ≥ 2.9 / pydantic ≥ 2.12 on 3.14; torch ≥ 2.14 / pydantic ≥ 2.14 on 3.15), which pip picks automatically.
+
+On **Python 3.15**, PyPI has no PyTorch wheels yet — install torch from PyTorch's index first:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu   # or a CUDA index
+```
 
 ## Your First Model
 
@@ -144,6 +150,6 @@ Note that `input_shape` describes the shape fed to **every** `Input` node — pe
 - [json-schema.md](json-schema.md) — every field of the format
 - [validation.md](validation.md) — how shapes propagate, symbolic dims, rule status per type
 - [blocks.md](blocks.md) — reusable sub-graphs
-- [custom-layers.md](custom-layers.md) — plug in your own `nn.Module`
+- [custom-layers.md](custom-layers.md) — define your own layers in JSON, or plug in an `nn.Module`
 - [huggingface.md](huggingface.md) — pretrained models as nodes
 - [api.md](api.md) — the full Python API

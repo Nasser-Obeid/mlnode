@@ -24,12 +24,22 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 
 # ── Check Python version ──
+# Works on Linux/macOS and Git Bash on Windows (where the interpreter is usually "python").
 info "Checking Python version..."
-if ! command -v python3 &> /dev/null; then
-    fail "python3 not found. Install Python >= $PYTHON_MIN"
+PYTHON="${PYTHON:-}"
+if [ -z "$PYTHON" ]; then
+    for candidate in python3 python; do
+        if command -v "$candidate" &> /dev/null && "$candidate" -c "import sys" &> /dev/null; then
+            PYTHON="$candidate"
+            break
+        fi
+    done
+fi
+if [ -z "$PYTHON" ]; then
+    fail "Python not found. Install Python >= $PYTHON_MIN (or set PYTHON=/path/to/python)"
 fi
 
-PY_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+PY_VERSION=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 PY_MAJOR=$(echo "$PY_VERSION" | cut -d. -f1)
 PY_MINOR=$(echo "$PY_VERSION" | cut -d. -f2)
 
@@ -42,7 +52,7 @@ ok "Python $PY_VERSION"
 VENV_DIR=".venv"
 if [ ! -d "$VENV_DIR" ]; then
     info "Creating virtual environment in $VENV_DIR..."
-    python3 -m venv "$VENV_DIR"
+    "$PYTHON" -m venv "$VENV_DIR"
     ok "Virtual environment created"
 else
     ok "Virtual environment already exists"
@@ -50,23 +60,40 @@ fi
 
 # ── Activate venv ──
 info "Activating virtual environment..."
-source "$VENV_DIR/bin/activate"
+if [ -f "$VENV_DIR/Scripts/activate" ]; then
+    source "$VENV_DIR/Scripts/activate"   # Windows (Git Bash)
+else
+    source "$VENV_DIR/bin/activate"
+fi
 ok "Activated ($VENV_DIR)"
 
 # ── Upgrade pip ──
 info "Upgrading pip..."
-pip install --upgrade pip --quiet
-ok "pip $(pip --version | awk '{print $2}')"
+python -m pip install --upgrade pip --quiet
+ok "pip $(python -m pip --version | awk '{print $2}')"
+
+# ── Install PyTorch ──
+# PyPI has no torch wheels for Python 3.15 yet; they are on download.pytorch.org.
+# Set TORCH_INDEX_URL to choose a build, e.g. https://download.pytorch.org/whl/cu128
+if [ -z "${TORCH_INDEX_URL:-}" ] && [ "$PY_MINOR" -ge 15 ]; then
+    TORCH_INDEX_URL="https://download.pytorch.org/whl/cpu"
+    warn "Python $PY_VERSION: installing CPU torch from $TORCH_INDEX_URL (set TORCH_INDEX_URL for CUDA)"
+fi
+if [ -n "${TORCH_INDEX_URL:-}" ]; then
+    info "Installing torch from $TORCH_INDEX_URL..."
+    python -m pip install "torch>=2.4" --index-url "$TORCH_INDEX_URL" --quiet
+    ok "torch installed"
+fi
 
 # ── Install package with dev dependencies ──
 info "Installing mlnode with dev dependencies..."
-pip install -e ".[dev]" --quiet
+python -m pip install -e ".[dev]" --quiet
 ok "mlnode installed"
 
 # ── Verify imports ──
 info "Verifying installation..."
-python3 -c "
-from mlnode import MLnodeModel, BlockRegistry, ValidationResult
+python -c "
+from mlnode import MLnodeModel, BlockRegistry, LayerRegistry, ValidationResult
 from mlnode.errors import MLnodeError, ValidationError, CycleDetectedError
 import torch
 print(f'  torch {torch.__version__}')
@@ -82,10 +109,10 @@ ok "All imports verified"
 # ── Run tests ──
 info "Running test suite..."
 echo ""
-python3 -m pytest tests/ -v --tb=short 2>&1 | tail -20
+python -m pytest tests/ -v --tb=short 2>&1 | tail -20
 echo ""
 
-RESULT=$(python3 -m pytest tests/ --tb=no -q 2>&1 | tail -1)
+RESULT=$(python -m pytest tests/ --tb=no -q 2>&1 | tail -1)
 if echo "$RESULT" | grep -q "passed"; then
     ok "Tests: $RESULT"
 else
@@ -94,7 +121,7 @@ fi
 
 # ── Quick smoke test ──
 info "Running smoke test..."
-python3 -c "
+python -c "
 from mlnode import MLnodeModel
 import torch
 
@@ -130,7 +157,11 @@ echo -e "${GREEN}║     Setup complete!                  ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════╝${NC}"
 echo ""
 echo "  Usage:"
-echo "    source $VENV_DIR/bin/activate"
+if [ -f "$VENV_DIR/Scripts/activate" ]; then
+    echo "    source $VENV_DIR/Scripts/activate"
+else
+    echo "    source $VENV_DIR/bin/activate"
+fi
 echo "    python -c \"from mlnode import MLnodeModel\""
 echo "    pytest tests/ -v"
 echo ""

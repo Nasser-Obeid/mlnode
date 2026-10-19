@@ -34,7 +34,7 @@
 | Reduction Ops | `Add`, `Concat`, `Stack`, `Subtract`, `Multiply`, `Divide` — reduction semantics are **implicit by type** (see §1.2). |
 | Tensor Ops | `Flatten`, `Reshape`, `Permute`, `Transpose`, `View`, `Unsqueeze`, `Squeeze`, `Split` |
 | HuggingFace | `hf_model` — loads pretrained weights. `hf_config` — instantiates randomly initialized model from config class (see §5). |
-| Custom | `{"type": "custom", "path": "user.layers.MyLayer", "params": {...}}` |
+| Custom | `{"type": "custom", "path": "user.layers.MyLayer", "params": {...}}` — or, from schema 1.1, `{"type": "custom", "layer": "MyLayer", "params": {...}}` referencing a JSON layer definition (see §4.1). |
 
 ### 1.1 Input Node(s) & Multi-Input Forward
 
@@ -156,6 +156,18 @@ def forward(self, *args):
 4. Catch exceptions → wrap in `CustomLayerError` with JSON node reference.
 5. Cache result. No `exec()` / `eval()` ever.
 
+### 4.1 JSON Custom Layers (schema 1.1)
+
+A backward-compatible addition (§6): a graph may declare `custom_layers`, a map of name → layer definition (`params`, `nodes`, `edges`, `output_node`). A `custom` node with `layer` instead of `path` instantiates that definition:
+
+1. Resolve the name: the file's `custom_layers`, then the supplied `LayerRegistry`, then the default registry.
+2. Bind node `params` to the declared params — reject missing, unknown, and mistyped values.
+3. Substitute `"$name"` / `"${expr}"` references in inner node params. Expressions are restricted arithmetic, evaluated by an AST whitelist — no `exec()` / `eval()`.
+4. Parse the result as a sub-graph (§2 rules apply; nesting depth ≤ 10).
+5. Validate shapes through the sub-graph (§3) and build it as a nested `nn.Module`.
+
+The definition's `Input` nodes are the layer's input ports (§1.1 ordering; edges bind by `target_port` = Input node id). Files using `custom_layers` must declare `"mlnode_schema_version": "1.1"`. Full reference: `docs/custom-layers.md`.
+
 ---
 
 ## 5. HuggingFace Contract
@@ -173,7 +185,7 @@ Both variants expose the model's `forward()` directly. The shape validator inspe
 
 | Version | Meaning |
 |---------|---------|
-| Minor (`1.0`) | Backward-compatible additions |
+| Minor (`1.0`, `1.1`) | Backward-compatible additions. `1.1` adds JSON custom layers (§4.1). |
 | Major (`2.0.0`) | Breaking changes, explicit migration guide |
 
 No auto-migration. Unsupported versions raise `SchemaVersionError`.
@@ -217,7 +229,7 @@ class MLnodeModel:
 
 ## 9. Tech Stack
 
-- Python ≥3.11, PyTorch ≥2.0, Transformers ≥4.30, NetworkX ≥3.0, Pydantic ≥2.0
+- Python 3.11–3.15 on Linux and Windows (CI matrix: `.github/workflows/tests.yml`), PyTorch ≥2.4, Transformers ≥4.30, NetworkX ≥3.0, Pydantic ≥2.0
 - ReactFlow ≥11 (separate repo, shares only JSON schema)
 
 ---

@@ -1,0 +1,87 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # CPU wheels: small downloads, and the only source of torch for
+      # Python 3.15 (PyPI has no cp315 torch wheels yet).
+      - name: Install torch (CPU)
+        run: python -m pip install "torch>=2.4" --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install mlnode
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest -q -W error::DeprecationWarning
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+      - run: python -m pip install ruff
+      # Catches open() without encoding= — the default is not UTF-8 on Windows before 3.15.
+      - run: ruff check --select PLW1514 src tests
+
+  setup-scripts:
+    name: ${{ matrix.script }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: setup.sh
+          - os: windows-latest
+            script: setup.ps1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: py
+        with:
+          python-version: "3.15"
+      - name: Run setup.sh
+        if: matrix.script == 'setup.sh'
+        env:
+          PYTHON: ${{ steps.py.outputs.python-path }}
+        run: ./setup.sh
+      - name: Run setup.ps1
+        if: matrix.script == 'setup.ps1'
+        shell: pwsh
+        env:
+          PYTHON: ${{ steps.py.outputs.python-path }}
+        run: ./setup.ps1

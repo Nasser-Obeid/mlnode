@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import keyword
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -14,7 +15,15 @@ from mlnode.schema.types import (
 )
 
 # Schema versions this parser supports.
-SUPPORTED_VERSIONS = ["1.0"]
+# 1.1 adds JSON-defined custom layers (top-level "custom_layers", node "layer").
+SUPPORTED_VERSIONS = ["1.0", "1.1"]
+
+# First schema version that may declare "custom_layers".
+CUSTOM_LAYERS_MIN_VERSION = "1.1"
+
+
+def _version_tuple(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
 
 
 class MetadataSchema(BaseModel):
@@ -86,8 +95,9 @@ class NodeSchema(BaseModel):
     hf_model: str | None = None
     hf_config: str | None = None
 
-    # Custom layer path.
+    # Custom layer: Python import path, or name of a JSON layer definition.
     path: str | None = None
+    layer: str | None = None
 
     # Block fields — inline definition or registry reference.
     block: BlockDefinition | None = None
@@ -107,8 +117,15 @@ class NodeSchema(BaseModel):
 
         # Custom layers
         if t == "custom":
-            if not self.path:
-                raise ValueError(f"Node '{self.id}': custom type requires 'path' field")
+            if not self.path and not self.layer:
+                raise ValueError(
+                    f"Node '{self.id}': custom type requires 'path' (Python class) "
+                    f"or 'layer' (JSON layer definition)"
+                )
+            if self.path and self.layer:
+                raise ValueError(
+                    f"Node '{self.id}': custom type takes 'path' or 'layer', not both"
+                )
             return self
 
         # Block nodes
@@ -141,6 +158,78 @@ class NodeSchema(BaseModel):
         return self
 
 
+ParamType = Literal["int", "float", "bool", "str", "list", "dict", "any"]
+
+
+class ParamSpec(BaseModel):
+    """A declared parameter of a JSON custom layer.
+
+    A param without a "default" key is required.
+    """
+
+    type: ParamType = "any"
+    default: Any = None
+    description: str | None = None
+
+    @property
+    def required(self) -> bool:
+        return "default" not in self.model_fields_set
+
+
+class LayerDefinition(BaseModel):
+    """A custom layer defined in JSON: a parameterized sub-graph.
+
+    Unlike a Block, a custom layer is built as its own nested nn.Module, takes
+    declared params, and may have several inputs. Its Input nodes are its input
+    ports, in declaration order; incoming edges bind by target_port (= the
+    Input node's id) or, unlabeled, in that order.
+
+    Node params may reference layer params: "$name" substitutes the value,
+    "${expr}" evaluates simple arithmetic over params (no eval()).
+    """
+
+    description: str | None = None
+    params: dict[str, ParamSpec] = Field(default_factory=dict)
+    nodes: list[NodeSchema]
+    edges: list[EdgeSchema]
+    output_node: str
+
+    @field_validator("params")
+    @classmethod
+    def param_names_are_identifiers(cls, v: dict[str, ParamSpec]) -> dict[str, ParamSpec]:
+        for name in v:
+            if not name.isidentifier() or keyword.iskeyword(name):
+                raise ValueError(
+                    f"Layer param name '{name}' must be a valid identifier "
+                    f"(letters, digits, underscores; not a keyword)."
+                )
+        return v
+
+    @model_validator(mode="after")
+    def validate_layer(self) -> LayerDefinition:
+        node_ids = [n.id for n in self.nodes]
+        if len(set(node_ids)) != len(node_ids):
+            dupes = sorted({i for i in node_ids if node_ids.count(i) > 1})
+            raise ValueError(f"Duplicate node IDs in layer: {dupes}")
+        if not self.input_ports:
+            raise ValueError("Layer must have at least one Input node.")
+        if self.output_node not in node_ids:
+            raise ValueError(
+                f"Layer output_node '{self.output_node}' not found in layer nodes."
+            )
+        for edge in self.edges:
+            if edge.source not in node_ids:
+                raise ValueError(f"Layer edge source '{edge.source}' not in layer nodes.")
+            if edge.target not in node_ids:
+                raise ValueError(f"Layer edge target '{edge.target}' not in layer nodes.")
+        return self
+
+    @property
+    def input_ports(self) -> list[str]:
+        """Input port names: the layer's Input node ids, in declaration order."""
+        return [n.id for n in self.nodes if n.type == "Input"]
+
+
 class GraphSchema(BaseModel):
     """Top-level MLnode graph (§1)."""
 
@@ -150,6 +239,7 @@ class GraphSchema(BaseModel):
     output_node: str
     nodes: list[NodeSchema]
     edges: list[EdgeSchema]
+    custom_layers: dict[str, LayerDefinition] = Field(default_factory=dict)
 
     @field_validator("mlnode_schema_version")
     @classmethod
@@ -164,6 +254,15 @@ class GraphSchema(BaseModel):
     def validate_graph_basics(self) -> GraphSchema:
         """Structural checks that don't require building the DAG."""
         node_ids = {n.id for n in self.nodes}
+
+        if self.custom_layers and _version_tuple(self.mlnode_schema_version) < _version_tuple(
+            CUSTOM_LAYERS_MIN_VERSION
+        ):
+            raise ValueError(
+                f"'custom_layers' requires mlnode_schema_version "
+                f"'{CUSTOM_LAYERS_MIN_VERSION}' or later "
+                f"(found '{self.mlnode_schema_version}')."
+            )
 
         # output_node must exist
         if self.output_node not in node_ids:
@@ -203,7 +302,9 @@ class GraphSchema(BaseModel):
         for shared_id, group in shared_groups.items():
             ref = group[0]
             for other in group[1:]:
-                if other.type != ref.type or other.params != ref.params:
+                if (other.type, other.params, other.path, other.layer) != (
+                    ref.type, ref.params, ref.path, ref.layer
+                ):
                     raise ValueError(
                         f"Weight-sharing group '{shared_id}': nodes '{ref.id}' and "
                         f"'{other.id}' must have identical type and params."

@@ -1,0 +1,16 @@
+# Normalize line endings so files check out correctly on Linux and Windows.
+* text=auto
+
+# Shell scripts must keep LF or bash fails with "$'\r': command not found".
+*.sh text eol=lf
+# PowerShell scripts are conventionally CRLF.
+*.ps1 text eol=crlf
+
+# JSON models are compared and saved with LF on every platform.
+*.json text eol=lf
+
+*.png binary
+*.jpg binary
+*.pth binary
+*.gz binary
+*.pkz binary

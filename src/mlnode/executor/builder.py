@@ -51,8 +51,11 @@ class MLnodeModule(nn.Module):
                 self._layers[node_id] = self._shared_layers[shared_id]
                 continue
 
-            # Build the layer
-            layer = build_layer(node.schema)
+            # Build the layer — JSON custom layers become nested MLnodeModules
+            if node_id in graph.custom_layers:
+                layer = MLnodeModule(graph.custom_layers[node_id])
+            else:
+                layer = build_layer(node.schema)
             self._layers[node_id] = layer
 
             if shared_id is not None:
@@ -195,6 +198,17 @@ class MLnodeModule(nn.Module):
             if isinstance(result, tuple) and node_type in _TUPLE_OUTPUT_LAYERS:
                 result = result[0]
             return result
+
+        # JSON custom layers with several Input nodes: bind by target_port
+        # (= the layer's Input node ids) or declaration order.
+        if node.id in self.graph.custom_layers:
+            ports = tuple(n.id for n in self.graph.custom_layers[node.id].input_nodes)
+            if len(ports) > 1:
+                edge_ports = [e.target_port for e in node.incoming_edges]
+                args = resolve_multi_inputs(
+                    node.id, node_type, edge_ports, incoming, ports=ports
+                )
+                return self._layers[node.id](*args)
 
         # Fallback reduction for non-reduction-op nodes with >1 input
         if len(incoming) > 1:
